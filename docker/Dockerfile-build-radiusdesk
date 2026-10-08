@@ -1,8 +1,7 @@
-FROM ubuntu:26.04
+FROM ubuntu:24.04
 	# We start from the ubuntu base
 
     # Arguments we can take
-    ARG radiusdesk_volume
 
     ## Install all software required
 
@@ -12,7 +11,7 @@ FROM ubuntu:26.04
 	
 	# Install, enable & configure Nginx & FPM
 	RUN apt-get -y install nginx
-	COPY ./default /etc/nginx/sites-enabled/
+	COPY ./docker/default /etc/nginx/sites-enabled/
 	
 	RUN apt-get -y install php-fpm
 	RUN apt-get -y install php-cli php-mysql php-gd php-curl php-xml php-mbstring php-intl php-sqlite3 git wget 
@@ -34,17 +33,19 @@ FROM ubuntu:26.04
 
     # Prepare all directories
     
-    COPY ./disable_strict_mode.cnf /etc/mysql/conf.d/
-    COPY ./rdcore /var/www/rdcore
-    COPY /rd_cake5 /var/www/rd_cake5
+    COPY ./docker/disable_strict_mode.cnf /etc/mysql/conf.d/
+    COPY ./rd /var/www/rdcore/rd
+    COPY ./login /var/www/rdcore/login
+    COPY ./AmpConf /var/www/rdcore/AmpConf
+    COPY ./cake4 /var/www/rdcore/cake4
 
     RUN mkdir -p /var/www/html
     RUN ln -s /var/www/rdcore/rd /var/www/html/rd
-    RUN ln -s /var/www/rd_cake5 /var/www/html/cake4
+    RUN ln -s /var/www/rdcore/cake4 /var/www/html/cake4
     RUN ln -s /var/www/rdcore/login /var/www/html/login
     RUN ln -s /var/www/rdcore/AmpConf/build/production/AmpConf /var/www/html/conf_dev
     RUN ln -s /var/www/rdcore/login/rd_client/build/production/AmpConf /var/www/html/usage
-    RUN ln -s /var/www/rd_cake5/rd_cake/setup/scripts/reporting /var/www/html/reporting
+    RUN ln -s /var/www/rdcore/cake4/rd_cake/setup/scripts/reporting /var/www/html/reporting
     
     # Create requried directories
     RUN mkdir -p /var/www/html/cake4/rd_cake/logs
@@ -66,12 +67,12 @@ FROM ubuntu:26.04
 
     # Setup Cron jobs
 	RUN apt-get install -y cron
-    RUN cp /var/www/html/cake4/rd_cake/setup/cron/rd_cake5 /etc/cron.d/
-    RUN chmod 0644 /etc/cron.d/rd_cake5
-    RUN crontab /etc/cron.d/rd_cake5
+    RUN cp /var/www/html/cake4/rd_cake/setup/cron/cron4 /etc/cron.d/
+    RUN chmod 0644 /etc/cron.d/cron4
+
 
     # configure php-fpm
-    RUN mkdir -p /var/log/php-fpm
+    RUN mkdir -p /var/log/php-fpm /run/php
   
     # Sets up Nginx with php-fpm and required php plugins
 
@@ -91,32 +92,36 @@ FROM ubuntu:26.04
     RUN mkdir -p /var/run/freeradius
     RUN chown freerad: /var/run/freeradius
 
-    COPY ./freeradius.service /lib/systemd/system/
+    COPY ./docker/freeradius.service /lib/systemd/system/
 
     ## cleanup
     RUN rm -rf /var/lib/apt/lists/*
 
     # supervisord allows multiple processes to be started with a single process
-    COPY ./supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+    COPY ./docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
     # Copy php settings
-    COPY ./php.ini /etc/php/php.ini
+    COPY ./docker/php.ini /etc/php/8.3/fpm/conf.d/99-radiusdesk.ini
+    COPY ./docker/php.ini /etc/php/8.3/cli/conf.d/99-radiusdesk.ini
 
     # Fix all cake4 configs to point to external database
-    RUN sed -i "s/'host' => 'localhost'/'host' => 'rdmariadb'/g" /var/www/html/cake4/rd_cake/config/app_local.php
-    RUN sed -i "s/\$servername = \"localhost\";/\$servername = \"rdmariadb\";/g" /var/www/html/cake4/rd_cake/setup/scripts/reporting/*.php
+    RUN sed -i "s/'host'[[:space:]]*=>[[:space:]]*'localhost'/'host' => 'rdmariadb'/g" /var/www/html/cake4/rd_cake/config/app_local.php
+    RUN sed -i 's/localhost/rdmariadb/g' /var/www/html/cake4/rd_cake/setup/scripts/reporting/*.php
 
     # Fix all Freeradius configs to point to our new database
     RUN sed -i 's/server = "localhost"/server = "rdmariadb"/g' /etc/freeradius/3.0/mods-available/sql
-	RUN sed -i "s/\$conf{'db_host'}\s*=\s*\"127.0.0.1\";/\$conf{'db_host'} = \"rdmariadb\";/g" /etc/freeradius/3.0/mods-config/perl/*.pl
+    RUN sed -i 's/127\.0\.0\.1/rdmariadb/g' /etc/freeradius/3.0/mods-config/perl/*.pl
 
     # Copy files from production to root www
     RUN cp -R /var/www/html/rd/build/production/Rd/* /var/www/html/
 
+    COPY ./docker/portal.conf /etc/nginx/conf.d/portal.conf
+
     # entrypoint run script when container starts - ignores what is in command
-    ENTRYPOINT /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
     # Expose RADIUSdesk front end ports
     EXPOSE 80/tcp
+    EXPOSE 550/tcp
     EXPOSE 1812/udp
     EXPOSE 1813/udp

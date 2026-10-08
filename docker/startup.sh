@@ -1,6 +1,8 @@
 #!/bin/bash
 
-FLAG="/firstboot.log"
+set -euo pipefail
+
+FLAG="/var/lib/mysql/.radiusdesk-initialized"
 
 if [[ ! -f $FLAG ]]; then
    #Put here your initialization sentences

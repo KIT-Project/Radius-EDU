@@ -1,18 +1,8 @@
 #!/bin/bash
-
-set -xu
-
+set -euo pipefail
+cd "$(dirname "$0")"
 source ./.env
-
-echo Radiusdesk DB Patcher
-echo ---------------------------------------
-echo
-
-cp rd_cake5/rd_cake/setup/db/* $RADIUSDESK_VOLUME/db_startup/db_patches
-cp startup.sh $RADIUSDESK_VOLUME/db_startup || exit 1
-
-echo Patching database for Radiusdesk ...
-docker exec -u 0 -it radiusdesk-mariadb /tmp/startup.sh || exit 1
-
-echo
-echo All done!
+mkdir -p "$RADIUSDESK_VOLUME/db_startup/db_patches"
+cp ../cake4/rd_cake/setup/db/*.sql "$RADIUSDESK_VOLUME/db_startup/db_patches/"
+cp startup.sh "$RADIUSDESK_VOLUME/db_startup/"
+docker compose exec -T rdmariadb bash /tmp/startup.sh
