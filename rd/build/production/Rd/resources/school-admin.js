@@ -295,24 +295,30 @@
             Ext.ComponentQuery.query('gridProfiles #fup, gridProfiles #advanced_edit, gridProfiles #profile_components').forEach(function (button) {
                 if (!button.hidden) button.hide();
             });
+            Ext.ComponentQuery.query('gridProfiles #edit').forEach(function (button) {
+                if (button.getText() !== 'แก้ไขชื่อ') button.setText('แก้ไขชื่อ');
+            });
             Ext.ComponentQuery.query('gridProfiles').forEach(function (grid) {
                 if (grid.schoolSessionGrid) return;
                 var toolbar = grid.getDockedItems('toolbar[dock="top"]')[0];
                 if (!toolbar) return;
                 grid.schoolSessionGrid = true;
-                grid.columns.forEach(function (column) {
+                grid.getColumnManager().getColumns().forEach(function (column) {
                     if (column.dataIndex === 'profile_components' || column.dataIndex === 'for_system') column.hide();
                 });
                 if (grid.menu_grid) {
-                    var items = grid.menu_grid.items.getRange();
-                    items.forEach(function (item, index) {
-                        if (index === 0) item.setText('แก้ไขชื่อ');
-                        else grid.menu_grid.remove(item, true);
-                    });
-                    grid.menu_grid.add({text:'ตั้งเวลา Session',handler:function () {
-                        sessionSettings(grid, grid.selRecord || grid.getSelectionModel().getSelection()[0]);
-                    }});
+                    grid.menu_grid.hide();
+                    grid.menu_grid.removeAll(true);
                 }
+                grid.getColumnManager().getColumns().forEach(function (column) {
+                    if (!column.isXType('actioncolumn') || !column.items[1]) return;
+                    column.items[1].iconCls = 'x-fa fa-clock';
+                    column.items[1].tooltip = 'ตั้งเวลา Session';
+                    column.items[1].handler = function (view,rowIndex,colIndex,item,event,record) {
+                        event.stopEvent(); sessionSettings(grid,record);
+                    };
+                    grid.getView().refresh();
+                });
                 toolbar.add({xtype:'button',text:'ตั้งเวลา Session',itemId:'schoolSessionSettings',
                     glyph:Rd.config.icnClock || Rd.config.icnEdit,
                     handler:function () { sessionSettings(grid, grid.getSelectionModel().getSelection()[0]); }
