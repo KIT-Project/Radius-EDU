@@ -25,7 +25,7 @@ FROM ubuntu:24.04
 	RUN apt-get -y install libdigest-hmac-perl
 	RUN apt-get -y install libdatetime-format-rfc3339-perl
 	RUN apt-get -y install eapoltest
-    RUN apt-get -y install freeradius freeradius-mysql
+    RUN apt-get -y install freeradius freeradius-mysql freeradius-utils
 	RUN apt-get -y install libjson-perl libwww-perl
 
     # Install supervisord to start up all services - as docker only allows one process to start up

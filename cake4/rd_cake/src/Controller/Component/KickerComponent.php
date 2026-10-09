@@ -12,6 +12,7 @@ use Cake\Controller\Component;
 use Cake\Core\Configure;
 use Cake\ORM\TableRegistry;
 use Cake\Http\Client;
+use Cake\Log\Log;
 
 
 class KickerComponent extends Component {
@@ -59,6 +60,7 @@ class KickerComponent extends Component {
         $radacctid      = $ent->radacctid;
         $cloudId = $this->getController()->getRequest()->getQuery('cloud_id');
 	    $nasipaddress   = $ent->nasipaddress;
+        Log::info('FortiGate Disconnect lookup ' . json_encode(['radacctid'=>$radacctid,'nasipaddress'=>$nasipaddress,'nasidentifier'=>$nasidentifier,'cloud_id'=>$cloudId]));
                 
      	//First we try to locate the client under dynamic_clients
      	$dc = $this->DynamicClients->find()
@@ -68,6 +70,7 @@ class KickerComponent extends Component {
      		->first();
      		
      	if($dc){   	    
+            Log::info('FortiGate Disconnect dynamic NAS ' . json_encode(['id'=>$dc->id,'type'=>$dc->type]));
             if ($dc->type === 'FortiGate-COA') {
                 return $this->FortiGateDisconnect->disconnect($dc, $ent);
             }
@@ -136,11 +139,12 @@ class KickerComponent extends Component {
      	if($nasWhere){
          	$nas = $this->Nas->find()
          		->where($nasWhere)
-                ->where($cloudId ? ['Nas.cloud_id'=>$cloudId] : [])
+                ->where($cloudId ? ['Nas.cloud_id IN'=>[$cloudId, -1]] : [])
          		->contain(['NaSettings'])
          		->first();
          		
 		    if($nas){
+                Log::info('FortiGate Disconnect NAS ' . json_encode(['id'=>$nas->id,'type'=>$nas->type,'cloud_id'=>$nas->cloud_id,'coa_port'=>$nas->coa_port]));
                 if ($nas->type === 'FortiGate-COA') {
                     return $this->FortiGateDisconnect->disconnect($nas, $ent);
                 }
@@ -192,6 +196,7 @@ class KickerComponent extends Component {
         $supported = ['AccelRadiusdesk','CoovaMeshdesk','private_psk','Juniper','Mikrotik-COA','Cisco-COA','Mikrotik-API','Mikrotik-Rest-API'];
         if ((!$dc || !in_array($dc->type, $supported, true)) &&
             (!isset($nas) || !$nas || !in_array($nas->type, $supported, true))) {
+            Log::info('FortiGate Disconnect not sent: no supported NAS matched');
             return ['title'=>'Disconnect unavailable','message'=>'NAS ไม่รองรับการตัด session หากเป็น FortiGate ให้เลือกชนิด FortiGate-COA','type'=>'error','acknowledged'=>false];
         }
         return $data = [];       

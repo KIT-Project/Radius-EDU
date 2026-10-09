@@ -134,3 +134,23 @@ check ACK, Accounting Stop, then a new Accounting Start after re-login.
 
 References: [Fortinet CoA configuration](https://community.fortinet.com/fortigate-3/technical-tip-how-to-configure-coa-change-of-authorization-support-on-the-fortigate-181038)
 and [captive portal session attributes](https://community.fortinet.com/fortigate-3/technical-tip-radius-coa-behavior-100060).
+
+### Trace a disconnect that does not send a packet
+
+Watch the application trace while clicking the existing Disconnect control:
+
+```bash
+sudo docker exec -it radiusdesk sh -c 'tail -n 0 -F /var/www/html/cake4/rd_cake/logs/debug.log | grep --line-buffered -Ei "fortigate.?disconnect"'
+```
+
+The lookup lines identify the matched NAS type and CoA port. The structured
+`[fortigate-disconnect]` entries record sending/rejection, the selected accounting
+session, outgoing username/IP/timestamp, exit code and verified ACK/NAK output.
+Shared secrets are excluded. Shared System NAS entries (`cloud_id = -1`) can be
+used by an authorized session in the selected cloud, alongside cloud-owned NAS.
+
+To confirm the packet reaches the host network independently of the interface:
+
+```bash
+sudo tcpdump -ni any -s0 -vvv 'host 10.10.10.1 and udp port 3799'
+```
