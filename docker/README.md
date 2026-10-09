@@ -230,3 +230,14 @@ To confirm the packet reaches the host network independently of the interface:
 ```bash
 sudo tcpdump -ni any -s0 -vvv 'host 10.10.10.1 and udp port 3799'
 ```
+
+### FortiGate QoS group matching
+
+On successful authentication, NAS identifiers beginning with `FortiGate` receive
+`Fortinet-Group-Name` from the authenticated user's server-side `Rd-Realm`
+(the **Realms (Groups)** selection), independently of the time-limit Profile.
+Configure the FortiGate RADIUS remote group match with that exact Realm name,
+then use the matching firewall group in the QoS policy. This overrides legacy
+Profile group replies when the user's Realm is available. Existing sessions
+require a new login to receive the updated attribute. Verify it in the
+`Access-Accept` packet, alongside `Session-Timeout`.

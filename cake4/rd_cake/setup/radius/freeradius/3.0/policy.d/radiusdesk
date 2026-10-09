@@ -84,6 +84,7 @@ RADIUSdesk.accounting {
 }
 
 RADIUSdesk.post-auth {
+    RADIUSdesk_fortigate_realm_group
 	RADIUSdesk_last_accept
 	RADIUSdesk_post_auth
     RADIUSdesk_auto_devices_check
@@ -1037,6 +1038,16 @@ RADIUSdesk_main {
 # School captive portal defaults. Explicit user/profile reply attributes take
 # precedence; existing quota/expiration processing may shorten Session-Timeout.
 # Attribute values are seconds. Do not apply this to unrelated NAS or EAP tunnels.
+# Use the server-side user Realm (Groups), never a group supplied by the client.
+# Assign authoritatively so legacy Profile replies cannot override the user's Realm.
+RADIUSdesk_fortigate_realm_group {
+    if ((&control:Rd-Realm) && (&control:Rd-Realm != "") && (&request:NAS-Identifier) && (&request:NAS-Identifier =~ /^FortiGate/)) {
+        update reply {
+            Fortinet-Group-Name := "%{control:Rd-Realm}"
+        }
+    }
+}
+
 RADIUSdesk_fortigate_session_limits {
     if ((!&request:EAP-Message) && (&request:NAS-Identifier) && (&request:NAS-Identifier =~ /^FortiGate/)) {
         if (!&reply:Session-Timeout) {
