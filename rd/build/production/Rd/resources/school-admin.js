@@ -52,7 +52,49 @@
             cell.textContent = duration(Number(cell.dataset.schoolSeconds) + elapsed);
         });
     }
-    function render(node, users, nas, profiles, sessions) {
+    function bytes(value) {
+        var amount = Math.max(0, Number(value) || 0);
+        var units = ['B','KB','MB','GB','TB'];
+        var index = 0;
+        while (amount >= 1024 && index < units.length-1) { amount /= 1024; index++; }
+        return amount.toLocaleString('th-TH', {maximumFractionDigits:index ? 2 : 0})+' '+units[index];
+    }
+    function trafficRanking(rows) {
+        var users = new Map();
+        (rows || []).forEach(function (row) {
+            if (!row.username) return;
+            var user = users.get(row.username) || {username:row.username,upload:0,download:0};
+            // RADIUS input is traffic received by the NAS from the client (upload).
+            user.upload += Math.max(0, Number(row.acctinputoctets) || 0);
+            user.download += Math.max(0, Number(row.acctoutputoctets) || 0);
+            user.total = user.upload + user.download;
+            users.set(row.username,user);
+        });
+        return Array.from(users.values()).filter(function (user) { return user.total > 0; })
+            .sort(function (a,b) { return b.total-a.total || a.username.localeCompare(b.username); });
+    }
+    function requestTraffic(cloud) {
+        var day = 86400000;
+        var start = Math.floor((Date.now()+7*3600000)/day)*day-7*3600000;
+        var filter = JSON.stringify([
+            {property:'acctstarttime',operator:'gt',value:new Date(start-day).toISOString().slice(0,10)},
+            {property:'acctstarttime',operator:'lt',value:new Date(start+2*day).toISOString().slice(0,10)}
+        ]);
+        var rows = [];
+        function page(offset) {
+            return request('radaccts/index',{cloud_id:cloud,limit:500,page:offset/500+1,start:offset,
+                sort:'radacctid',dir:'ASC',filter:filter}).then(function (data) {
+                rows = rows.concat(data.items || []);
+                if (offset+500 < Number(data.totalCount) && (data.items || []).length) return page(offset+500);
+                return {items:rows.filter(function (row) {
+                    var timestamp = accountingTime(row.acctstarttime);
+                    return timestamp >= start && timestamp < start+day;
+                })};
+            });
+        }
+        return page(0);
+    }
+    function render(node, users, nas, profiles, sessions, traffic) {
         var u = {};
         (users.items || []).forEach(function (row) {
             Object.keys(row).forEach(function (key) {
@@ -68,11 +110,15 @@
             html += '<article class="school-stat '+card[2]+'"><strong>'+escape(card[0])+'</strong><span>'+card[1]+'</span><i class="fa '+card[3]+'" aria-hidden="true"></i></article>';
         });
         html += '</div><div class="school-panels"><section class="school-widget"><h3>สถานะผู้ใช้</h3><div class="school-donut" style="--online:'+percent+'%"><div><strong>'+online+' / '+total+'</strong><span>ออนไลน์ '+percent+'%</span></div></div><div class="school-legend"><span style="color:#50bc98">● ออนไลน์ '+online+'</span><span style="color:#8592a3">● ออฟไลน์ '+Math.max(0,total-online)+'</span></div></section>';
-        html += '<section class="school-widget"><h3>สรุปบัญชีและนโยบาย</h3><dl>';
-        [[total,'ผู้ใช้ทั้งหมด'],[nas.totalCount,'NAS ที่ลงทะเบียน'],[profiles.totalCount,'Profiles']].forEach(function (item) {
-            html += '<div><dt>'+item[1]+'</dt><dd>'+escape(item[0])+'</dd></div>';
+        html += '<section class="school-widget"><h3>ผู้ใช้ที่ใช้ Traffic สูงสุดวันนี้</h3><div class="school-traffic">';
+        var ranking = trafficRanking(traffic && traffic.items);
+        var trafficTotal = ranking.reduce(function (sum,user) { return sum+user.total; },0);
+        ranking.slice(0,5).forEach(function (user,index) {
+            var share = Math.round(user.total/trafficTotal*100);
+            html += '<div class="school-traffic-row"><span class="school-traffic-rank">'+(index+1)+'</span><div class="school-traffic-detail"><div class="school-traffic-heading"><strong>'+escape(user.username)+'</strong><b>'+bytes(user.total)+'</b></div><div class="school-traffic-bar"><i style="width:'+share+'%"></i></div><div class="school-traffic-meta"><span>↓ '+bytes(user.download)+' · ↑ '+bytes(user.upload)+'</span><span>'+share+'%</span></div></div></div>';
         });
-        html += '</dl></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
+        if (!ranking.length) html += '<p class="school-empty">ยังไม่มีข้อมูลปริมาณการใช้งานวันนี้</p>';
+        html += '</div><p class="school-note">รวม session ที่เริ่มวันนี้ · ยอดตาม Accounting ล่าสุด</p></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
         var rows = sessions.items || [];
         rows.forEach(function (row) {
             var seconds = Math.max(0, Number(row.acctsessiontime) || 0);
@@ -155,9 +201,10 @@
                 request('dashboard/users-items',{cloud_id:cloud}),
                 request('nas/index',{cloud_id:cloud,limit:1,page:1,start:0}),
                 request('profiles/index',{cloud_id:cloud,limit:1,page:1,start:0}),
-                request('radaccts/index',{cloud_id:cloud,only_connected:'true',limit:100,page:1,start:0,sort:'acctstarttime',dir:'DESC'})
+                request('radaccts/index',{cloud_id:cloud,only_connected:'true',limit:100,page:1,start:0,sort:'acctstarttime',dir:'DESC'}),
+                requestTraffic(cloud)
             ]).then(function (data) {
-                if (node.isConnected) render(node,data[0],data[1],data[2],data[3]);
+                if (node.isConnected) render(node,data[0],data[1],data[2],data[3],data[4]);
             }).catch(function () {
                 if (node.isConnected && !node.schoolUpdated) node.textContent = 'ไม่สามารถโหลด Dashboard ได้';
             }).then(function () {
