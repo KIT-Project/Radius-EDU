@@ -107,6 +107,11 @@ Ext.define('Rd.view.permanentUsers.winPermanentUserAdd', {
                                     labelClsExtra: 'lblRdReq'
                                 },
                                 {
+                                    xtype: 'textareafield', name: 'description', fieldLabel: 'Description',
+                                    emptyText: 'เช่น นักเรียน ม.1/3 หรือ ป.6/2', allowBlank: true,
+                                    maxLength: 255, enforceMaxLength: true, height: 65
+                                },
+                                {
                                     xtype       : 'cmbRealm',
                                     allowBlank  : false,
                                     labelClsExtra: 'lblRdReq',

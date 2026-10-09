@@ -264,3 +264,21 @@ sudo docker exec -it radiusdesk sh -c 'tail -n 0 -F /var/www/html/cake4/rd_cake/
 `portal-session started` records the caller IP and username; `portal-session
 confirmed` indicates that the new Accounting session was found. No passwords
 or confirmation tokens are logged.
+
+### Internal user descriptions
+
+User creation and Personal information include an optional Description (up to
+255 characters), for example `นักเรียน ม.1/3`. It is stored in
+`permanent_users.description` only and does not become a RADIUS attribute.
+Existing installations must apply the schema patch before using the field:
+
+```bash
+cd ~/Radius-EDU/docker
+git pull origin Dev
+sudo docker exec -i radiusdesk-mariadb mariadb -u root rd < ../cake4/rd_cake/setup/db/8.123_add_user_description.sql
+sudo docker compose up -d --build radiusdesk
+sudo docker exec -u www-data radiusdesk /var/www/html/cake4/rd_cake/bin/cake cache clear_all
+```
+
+Refresh the admin page after updating. New database initialization applies the
+patch automatically through the existing database patch workflow.

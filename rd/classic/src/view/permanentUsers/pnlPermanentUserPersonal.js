@@ -54,6 +54,11 @@ Ext.define('Rd.view.permanentUsers.pnlPermanentUserPersonal', {
                     name        : "surname",
                     allowBlank  :true
                 },
+                {
+                    xtype: 'textareafield', name: 'description', fieldLabel: 'Description',
+                    emptyText: 'เช่น นักเรียน ม.1/3 หรือ ป.6/2', allowBlank: true,
+                    maxLength: 255, enforceMaxLength: true, height: 65
+                },
                 { 
                     xtype       : 'cmbLanguages', 
                     width       : 350, 

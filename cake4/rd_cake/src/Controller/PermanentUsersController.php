@@ -849,7 +849,7 @@ class PermanentUsersController extends AppController{
         //TODO Check if the owner of this user is in the chain of the APs
         if(isset($req_q['user_id'])){
             $entity         = $this->{$this->main_model}->get($req_q['user_id']);
-            $include_items  = ['name','surname','phone','address', 'email','language_id','country_id','id'];
+            $include_items  = ['name','surname','description','phone','address', 'email','language_id','country_id','id'];
             foreach($include_items as $i){
                 $items[$i] = $entity->{$i};
             }
