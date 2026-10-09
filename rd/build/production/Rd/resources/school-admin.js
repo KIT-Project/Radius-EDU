@@ -91,6 +91,14 @@
     }
     function populate() {
         if (window.schoolUi.enabled) {
+            // Keep the existing default-cloud selection and API scope; hide only its header control.
+            Ext.ComponentQuery.query('pnlDashboard #cmbCloud').forEach(function (combo) {
+                if (combo.schoolCloudHidden) return;
+                combo.schoolCloudHidden = true;
+                combo.hide();
+                var separator = combo.nextSibling();
+                if (separator && separator.isXType('tbseparator')) separator.hide();
+            });
             document.querySelectorAll('[id^="tbtext-"] h1').forEach(function (heading) {
                 Array.from(heading.childNodes).forEach(function (node) {
                     if (node.nodeType === Node.TEXT_NODE && node.textContent.indexOf('RADIUSdesk') !== -1) {
