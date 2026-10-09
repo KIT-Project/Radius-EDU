@@ -190,15 +190,18 @@
         });
         html += '</div><div class="school-panels"><section class="school-widget"><h3>สถานะผู้ใช้</h3><div class="school-donut" style="--online:'+percent+'%"><div><strong>'+online+' / '+total+'</strong><span>ออนไลน์ '+percent+'%</span></div></div><div class="school-legend"><span style="color:#50bc98">● ออนไลน์ '+online+'</span><span style="color:#8592a3">● ออฟไลน์ '+Math.max(0,total-online)+'</span></div></section>';
         html += '<section class="school-widget"><h3>ผู้ใช้ที่ใช้ Traffic สูงสุด</h3><div class="school-traffic">';
-        var ranking = trafficRanking(traffic && traffic.items);
+        var rows = sessions.items || [];
+        var onlineNames = new Set(rows.map(function (row) { return row.username; }));
+        var ranking = trafficRanking(traffic && traffic.items).filter(function (user) {
+            return onlineNames.has(user.username);
+        });
         var trafficTotal = ranking.reduce(function (sum,user) { return sum+user.total; },0);
         ranking.slice(0,5).forEach(function (user,index) {
             var share = Math.round(user.total/trafficTotal*100);
             html += '<div class="school-traffic-row"><span class="school-traffic-rank">'+(index+1)+'</span><div class="school-traffic-detail"><div class="school-traffic-heading"><strong>'+escape(user.username)+'</strong><b>'+bytes(user.total)+'</b></div><div class="school-traffic-bar"><i style="width:'+share+'%"></i></div><div class="school-traffic-meta"><span>↓ '+bytes(user.download)+' · ↑ '+bytes(user.upload)+'</span><span>'+share+'%</span></div></div></div>';
         });
-        if (!ranking.length) html += '<p class="school-empty">ยังไม่มีข้อมูลปริมาณการใช้งาน</p>';
+        if (!ranking.length) html += '<p class="school-empty">ยังไม่มีผู้ใช้ออนไลน์ที่มีข้อมูล Traffic</p>';
         html += '</div></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
-        var rows = sessions.items || [];
         rows.forEach(function (row) {
             var seconds = Math.max(0, Number(row.acctsessiontime) || 0);
             var updated = accountingTime(row.acctupdatetime);
