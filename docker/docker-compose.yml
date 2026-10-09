@@ -13,7 +13,7 @@ services:
 
     ports:
       - "${ADMIN_HTTP_PORT:-8000}:443"
-      - "${PORTAL_HTTP_PORT:-5500}:550"
+      - "${PORTAL_HTTP_PORT:-443}:550"
       - "1812:1812/udp"
       - "1813:1813/udp"
 
