@@ -103,6 +103,24 @@ working external portal integration. The same token is retained in form data,
 along with the supplied login/post and client/AP fields. Credentials stay in
 the POST body, and redirect fields cannot overwrite username/password.
 
+## Captive login destination and failed-login page
+
+The school portal sends a fixed `CONTINUE_URL=https://www.google.com/` with the
+native `/fgtauth` POST (query string and form field). FortiGate still validates
+credentials before redirecting; the portal does not navigate on submit or assume
+that an HTTP 200 response means authentication succeeded. Fortinet documents
+`CONTINUE_URL` as overriding the interface's redirect destination:
+[Captive portals](https://docs.fortinet.com/document/fortigate/latest/administration-guide/934626/captive-portals).
+Verify the redirect on the deployed FortiGate firmware with a real client.
+
+When FortiGate returns `/login/?Auth=Failed`, the school page displays a Thai
+login-failure alert. If the response omits `magic` and `post`, the retry link opens
+an HTTP page so the gateway can issue a fresh challenge. No credentials or
+transaction tokens are saved in browser storage. Login failures can also reflect
+group permissions, so the alert does not assume every rejection is a bad password.
+
+Run the portal flow checks with `node --test login/bootstrap5/tests/schoolPortal.test.cjs`.
+
 ## Disconnect a FortiGate captive-portal session
 
 In NAS settings, select **FortiGate-COA**, use the FortiGate NAS IP reported in
