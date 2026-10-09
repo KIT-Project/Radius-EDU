@@ -43,7 +43,7 @@ Allow unauthenticated clients to reach this IP and TCP port in FortiGate's porta
 Both web listeners use HTTPS. Host port variables retain their existing names for compatibility.
 
 FortiGate appends `post` and `magic` to the redirect URL. The existing frontend retains
-`magic` and POSTs `magic`, `username`, and `password` to the FortiGate HTTPS `/fgtauth`
+`magic` and POSTs `magic`, `username`, and `password` with the supplied gateway context to the FortiGate HTTPS `/fgtauth`
 URL supplied in `post`, without requiring a preconfigured gateway IP. Optionally
 restrict it by setting `fortigateOrigin` in `login/bootstrap5/portal-config.js` and
 rebuilding the image. The default accepts any HTTPS origin with the exact `/fgtauth`
@@ -97,3 +97,8 @@ Existing certificates are preserved because the server address is unchanged.
 The short `/login/` path is an internal Nginx rewrite to the existing portal files;
 relative assets and FortiGate query parameters are preserved. After pulling this
 path change, run `sudo docker compose up -d --build` from `docker/`.
+
+Login submissions use `/fgtauth?magic=<redirect-token>&auth=1`, matching the
+working external portal integration. The same token is retained in form data,
+along with the supplied login/post and client/AP fields. Credentials stay in
+the POST body, and redirect fields cannot overwrite username/password.

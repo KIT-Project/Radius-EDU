@@ -23,8 +23,21 @@
                 target.search || target.hash || magic.length > 512) {
                 throw new Error('Invalid gateway');
             }
+            // Match the working external portal: transaction token in URL and body.
+            target.searchParams.set('magic', magic);
+            target.searchParams.set('auth', '1');
             form.action = target.href;
             document.getElementById('magic').value = magic;
+            // Preserve gateway context without allowing it to replace credentials.
+            ['login', 'post', 'usermac', 'apmac', 'apip', 'userip',
+                'ssid', 'apname', 'bssid', 'device_type'].forEach(function (name) {
+                if (!params.has(name)) return;
+                const field = document.createElement('input');
+                field.type = 'hidden';
+                field.name = name;
+                field.value = params.get(name);
+                form.appendChild(field);
+            });
             button.disabled = false;
             ready = true;
             status.textContent = 'พร้อมเข้าสู่ระบบ Wi-Fi ของโรงเรียน';
