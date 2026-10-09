@@ -43,9 +43,11 @@ Allow unauthenticated clients to reach this IP and TCP port in FortiGate's porta
 Both web listeners use HTTPS. Host port variables retain their existing names for compatibility.
 
 FortiGate appends `post` and `magic` to the redirect URL. The existing frontend retains
-`magic` and POSTs `magic`, `username`, and `password` to the trusted FortiGate `/fgtauth`
-URL supplied in `post`. Set its exact HTTPS origin in `login/bootstrap5/portal-config.js`
-and rebuild the image. Do not set this origin to the RADIUSdesk server's portal URL.
+`magic` and POSTs `magic`, `username`, and `password` to the FortiGate HTTPS `/fgtauth`
+URL supplied in `post`, without requiring a preconfigured gateway IP. Optionally
+restrict it by setting `fortigateOrigin` in `login/bootstrap5/portal-config.js` and
+rebuilding the image. The default accepts any HTTPS origin with the exact `/fgtauth`
+path; only open portal URLs received from your network gateway.
 FortiGate creates the authenticated session and reports it to RADIUS via UDP 1813;
 the portal path itself is not a session creation or disconnect API.
 
