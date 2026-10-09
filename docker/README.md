@@ -126,6 +126,45 @@ group permissions, so the alert does not assume every rejection is a bad passwor
 
 Run the portal flow checks with `node --test login/bootstrap5/tests/schoolPortal.test.cjs`.
 
+## Automatic session and idle timeouts
+
+Non-EAP logins with a `NAS-Identifier` beginning with `FortiGate` receive default
+RADIUS reply attributes `Session-Timeout := 28800` (8 hours per login) and
+`Idle-Timeout := 1800` (30 minutes). Explicit user/profile reply values take
+precedence. Existing remaining-time quota and expiration policies can shorten
+the session limit. These defaults are applied to new authentications, not sessions
+that are already connected. To customize them through the existing Profile
+Components attribute editor, add these as **reply** attributes with operator `:=`
+and a value in seconds to a component assigned to the user's Profile.
+
+FortiGate must enforce the RADIUS session limit and the actual traffic idle timer:
+
+```text
+config user setting
+    set radius-ses-timeout-act hard-timeout
+    set auth-timeout-type idle-timeout
+    set auth-timeout 30
+end
+```
+
+This user setting applies to authenticated users in the current VDOM. Check the
+school's RADIUS user groups for nonzero `authtimeout` overrides, which can change
+the effective idle time. These settings are described in Fortinet's
+[authentication settings](https://docs.fortinet.com/document/fortigate/7.4.7/administration-guide/709376/authentication-settings)
+and [RADIUS session timeout action](https://docs.fortinet.com/document/fortigate/7.6.3/cli-reference/263822197/config-user-setting).
+Do not rely on support for the RADIUS `Idle-Timeout` attribute alone for firewall
+authentication; configure and verify the FortiGate idle timer as above.
+
+Idle means no qualifying network traffic, not no mouse/keyboard interaction or
+no accounting updates. Background traffic may keep a user active. FortiGate
+expires the authentication and sends Accounting-Stop, after which the dashboard
+removes the online session. No username or IP is banned: the user can authenticate
+again from the same IP, starting a new 8-hour session.
+
+After deploying, disconnect and authenticate again. Check the real Access-Accept
+for both attributes, then validate expiration on the device with shorter temporary
+Profile limits (for example `Session-Timeout := 120`) before an 8-hour test.
+
 ## Disconnect a FortiGate captive-portal session
 
 In NAS settings, select **FortiGate-COA**, use the FortiGate NAS IP reported in

@@ -38,6 +38,7 @@ RADIUSdesk.authorize {
     #RADIUSdesk -> expiration and logintime will set a reply attribute for Session-Timeout. 
     #We may however have to override it if
     #the **time based counter** or the Voucher's **time left** is **smaller** than the Session-Timeout
+    RADIUSdesk_fortigate_session_limits
     RADIUSdesk_session_timeout
     RADIUSdesk_logintime
     RADIUSdesk_adv
@@ -1030,6 +1031,24 @@ RADIUSdesk_main {
     }
     else {
         RADIUSdesk_user_check  
+    }
+}
+
+# School captive portal defaults. Explicit user/profile reply attributes take
+# precedence; existing quota/expiration processing may shorten Session-Timeout.
+# Attribute values are seconds. Do not apply this to unrelated NAS or EAP tunnels.
+RADIUSdesk_fortigate_session_limits {
+    if ((!&request:EAP-Message) && (&request:NAS-Identifier) && (&request:NAS-Identifier =~ /^FortiGate/)) {
+        if (!&reply:Session-Timeout) {
+            update reply {
+                Session-Timeout := 28800
+            }
+        }
+        if (!&reply:Idle-Timeout) {
+            update reply {
+                Idle-Timeout := 1800
+            }
+        }
     }
 }
 
