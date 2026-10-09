@@ -77,13 +77,34 @@
         var rows = [];
         function page(offset) {
             return request('radaccts/index',{cloud_id:cloud,limit:500,page:offset/500+1,start:offset,
-                sort:'radacctid',dir:'ASC'}).then(function (data) {
+                sort:'radacctid',dir:'ASC',only_connected:'',filter:'[]'}).then(function (data) {
                 rows = rows.concat(data.items || []);
                 if (offset+500 < Number(data.totalCount) && (data.items || []).length) return page(offset+500);
                 return {items:rows};
             });
         }
-        return page(0);
+        return Promise.all([
+            page(0).catch(function () { return null; }),
+            request('data-usages-new/usage-for-realm-new', {cloud_id:cloud,type:'realm',username:0,span:'day'})
+                .catch(function () { return null; })
+        ]).then(function (data) {
+            // Data Usage already aggregates received accounting counters in UserStats.
+            // Prefer the higher available total per user; never add the same counters twice.
+            if (!data[0] && !data[1]) throw new Error('Traffic APIs unavailable');
+            var combined = new Map();
+            trafficRanking((data[0] || {}).items).forEach(function (user) { combined.set(user.username,user); });
+            (((data[1] || {}).data || {}).top || []).forEach(function (row) {
+                var upload = Math.max(0,Number(row.data_in) || 0);
+                var download = Math.max(0,Number(row.data_out) || 0);
+                var current = combined.get(row.username);
+                if (!current || upload+download > current.total) {
+                    combined.set(row.username,{username:row.username,upload:upload,download:download,total:upload+download});
+                }
+            });
+            return {items:Array.from(combined.values()).map(function (user) {
+                return {username:user.username,acctinputoctets:user.upload,acctoutputoctets:user.download};
+            })};
+        });
     }
     function render(node, users, nas, profiles, sessions, traffic) {
         var u = {};
