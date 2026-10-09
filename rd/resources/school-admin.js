@@ -219,6 +219,43 @@
     }
     function populate() {
         if (window.schoolUi.enabled) {
+            Ext.ComponentQuery.query('pnlAddEditProfile').forEach(function (form) {
+                if (form.schoolSessionStyled) return;
+                form.schoolSessionStyled = true;
+                var limits = form.items.getAt(1);
+                if (limits) {
+                    limits.query('field').forEach(function (field) { field.disable(); });
+                    limits.hide();
+                }
+                var general = form.items.getAt(0);
+                if (general) general.setHeight(form.profileId ? 140 : 210);
+                form.add({xtype:'hiddenfield',name:'school_session_policy',value:'1'});
+                form.add({
+                    xtype:'panel',title:'ระยะเวลาการใช้งาน',width:'100%',bodyPadding:24,
+                    items:[{
+                        xtype:'combobox',name:'school_session_timeout',fieldLabel:'เวลาใช้งานต่อ login',
+                        labelAlign:'top',width:Math.min(420,Math.max(240,window.innerWidth-160)),queryMode:'local',editable:false,
+                        allowBlank:false,forceSelection:true,displayField:'label',valueField:'seconds',value:28800,
+                        store:{fields:['seconds','label'],data:[
+                            {seconds:1800,label:'30 นาที'},{seconds:3600,label:'1 ชั่วโมง'},
+                            {seconds:7200,label:'2 ชั่วโมง'},{seconds:14400,label:'4 ชั่วโมง'},
+                            {seconds:28800,label:'8 ชั่วโมง'},{seconds:43200,label:'12 ชั่วโมง'},
+                            {seconds:86400,label:'24 ชั่วโมง'}
+                        ]},
+                        listeners:{change:function (field,value) {
+                            if (value && field.getStore().findExact('seconds',Number(value)) === -1) {
+                                field.getStore().add({seconds:Number(value),label:'ค่าปัจจุบัน: '+Number(value)/60+' นาที'});
+                            }
+                        }}
+                    },{
+                        xtype:'component',margin:'18 0 0 0',
+                        html:'<p>ครบเวลาที่เลือก ระบบจะให้เข้าสู่ระบบใหม่ โดยเริ่มนับเวลาใหม่ทุกครั้งที่ login</p><p>เวลาที่เปลี่ยนจะใช้ในการเข้าสู่ระบบครั้งถัดไป</p>'
+                    }]
+                });
+                form.updateLayout();
+                // The original show handler may already have loaded before this adapter ran.
+                if (form.profileId) form.getController().loadProfileContent();
+            });
             // Header controls remain instantiated so default-cloud selection keeps working.
             Ext.ComponentQuery.query('#cmbCloud, #btnSetupWizard').forEach(function (component) {
                 if (!component.hidden) component.hide();

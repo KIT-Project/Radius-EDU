@@ -326,6 +326,7 @@ class ProfilesController extends AppController
 		}
 		
 		$this->reqData = $this->request->getData();
+        if (!$this->_validateSchoolSessionPolicy()) { return; }
 		
         $check_items = [
 			'data_limit_mac',
@@ -415,6 +416,7 @@ class ProfilesController extends AppController
 		}
 		
 		$this->reqData	= $this->request->getData();
+        if (!$this->_validateSchoolSessionPolicy()) { return; }
 
         $check_items = [
 			'data_limit_mac',
@@ -978,11 +980,34 @@ class ProfilesController extends AppController
                     
     }
     
+    private function _validateSchoolSessionPolicy(): bool {
+        if (($this->reqData['school_session_policy'] ?? null) !== '1') { return true; }
+        $seconds = filter_var($this->reqData['school_session_timeout'] ?? null, FILTER_VALIDATE_INT);
+        if ($seconds === false || $seconds < 60 || $seconds > 604800) {
+            $this->set(['success' => false, 'message' => 'กรุณาเลือกเวลาใช้งานระหว่าง 1 นาทีถึง 7 วัน']);
+            $this->viewBuilder()->setOption('serialize', true);
+            return false;
+        }
+        $this->reqData['school_session_timeout'] = $seconds;
+        return true;
+    }
+
     private function _doRadius($groupname){
     
         //Clear any posible left-overs
         $this->{'Radgroupchecks'}->deleteAll(['groupname' => $groupname]);
         $this->{'Radgroupreplies'}->deleteAll(['groupname' => $groupname]);
+
+        if (($this->reqData['school_session_policy'] ?? null) === '1') {
+            $reply = $this->Radgroupreplies->newEntity([
+                'groupname' => $groupname, 'attribute' => 'Session-Timeout',
+                'op' => ':=', 'value' => (string)$this->reqData['school_session_timeout'],
+                'comment' => 'School session duration'
+            ]);
+            $this->Radgroupreplies->saveOrFail($reply);
+            return;
+        }
+
       
         if($this->reqData['data_limit_enabled']){
          
@@ -1402,6 +1427,7 @@ class ProfilesController extends AppController
         $e_list = $this->{'Radgroupreplies'}->find()->where(['Radgroupreplies.groupname' => $groupname])->all();
         
         $data = [
+            'school_session_timeout' => 28800,
             'speed_limit_enabled'   => false,
             'time_limit_enabled'    => false,
             'data_limit_enabled'    => false,
@@ -1417,6 +1443,10 @@ class ProfilesController extends AppController
         $bw_down_check  = false;
            
         foreach($e_list as $e){
+            if ($e->attribute === 'Session-Timeout') {
+                $data['school_session_timeout'] = (int)$e->value;
+            }
+
             if($e->attribute == 'WISPr-Bandwidth-Max-Up'){
                 $bw_up_check = true;
                 if(intval($e->value) >= 1048576){
