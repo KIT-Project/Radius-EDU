@@ -49,6 +49,7 @@ FROM ubuntu:24.04
     
     # Create requried directories
     RUN mkdir -p /var/www/html/cake4/rd_cake/logs
+    RUN touch /var/www/html/cake4/rd_cake/logs/debug.log /var/www/html/cake4/rd_cake/logs/error.log
     RUN mkdir -p /var/www/html/cake4/rd_cake/webroot/files/imagecache
     RUN mkdir -p /var/www/html/cake4/rd_cake/tmp
     

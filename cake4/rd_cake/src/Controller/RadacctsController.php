@@ -5,6 +5,7 @@ use Cake\I18n\FrozenTime;
 use Cake\Core\Configure;
 use Cake\Utility\Inflector;
 use Cake\ORM\Query;
+use Cake\Log\Log;
 
 use Cake\Core\Configure\Engine\PhpConfig;
 
@@ -563,6 +564,7 @@ class RadacctsController extends AppController {
 	
 	
     public function kickActiveUsername(){
+        $this->traceDisconnectRequest('kickActiveUsername');
         $user = $this->_ap_right_check();
         if (!$user) return;
         $query = $this->Radaccts->find()->where(['Radaccts.acctstoptime IS NULL']);
@@ -583,6 +585,7 @@ class RadacctsController extends AppController {
     }
 
     public function kickActive(){
+        $this->traceDisconnectRequest('kickActive');
         $user = $this->_ap_right_check();
         if (!$user) return;
         $ids = [];
@@ -604,6 +607,17 @@ class RadacctsController extends AppController {
             return;
         }
         $this->sendSessionDisconnects($sessions, (string)$this->request->getQuery('token'));
+    }
+
+    private function traceDisconnectRequest(string $action): void
+    {
+        $ids = array_values(array_filter(array_keys($this->request->getQuery()), static function ($key) {
+            return preg_match('/^[1-9][0-9]*$/', (string)$key);
+        }));
+        // Log before authorization/selection checks; never record query tokens or passwords.
+        Log::info('[fortigate-disconnect] request ' . json_encode([
+            'action'=>$action, 'cloud_id'=>$this->request->getQuery('cloud_id'), 'session_ids'=>$ids
+        ]));
     }
 
     private function sendSessionDisconnects($sessions, string $token): void
@@ -640,11 +654,13 @@ class RadacctsController extends AppController {
             $data = ['title'=>'Session not found','message'=>'ไม่พบ session ที่ออนไลน์','type'=>'error'];
         }
         // Do not update radacct or block the user/IP here. Accounting Stop closes the old row.
+        Log::info('[fortigate-disconnect] response ' . json_encode(['success'=>!$failed,'results'=>$results], JSON_UNESCAPED_UNICODE));
         $this->set(['success'=>!$failed,'message'=>$data['message'],'data'=>$data,'results'=>$results]);
         $this->viewBuilder()->setOption('serialize', true);
     }
 
     public function closeOpen(){
+        $this->traceDisconnectRequest('closeOpen');
 
         //__ Authentication + Authorization __
         $user = $this->_ap_right_check();

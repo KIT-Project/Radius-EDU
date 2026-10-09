@@ -232,6 +232,14 @@
                     if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
                 });
             });
+            Ext.ComponentQuery.query('gridRadaccts #kick, gridRadaccts #close').forEach(function (button) {
+                var kick = button.getItemId() === 'kick';
+                var text = kick ? 'ตัดการเชื่อมต่อ' : 'ปิดรายการ';
+                if (button.getText() !== text) {
+                    button.setText(text);
+                    button.setTooltip(kick ? 'ส่ง Disconnect-Request ไป NAS เพื่อตัดการใช้งานจริง' : 'ปิดรายการ Accounting เท่านั้น ไม่ตัดการใช้งานบน FortiGate');
+                }
+            });
             Ext.ComponentQuery.query('pnlDashboard > toolbar > tbseparator').forEach(function (separator) {
                 if (!separator.hidden) separator.hide();
             });

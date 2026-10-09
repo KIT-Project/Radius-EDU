@@ -137,9 +137,13 @@ and [captive portal session attributes](https://community.fortinet.com/fortigate
 
 ### Trace a disconnect that does not send a packet
 
-Watch the application trace while clicking the existing Disconnect control:
+Watch the application trace while clicking **ตัดการเชื่อมต่อ** (Kick).
+**ปิดรายการ** (Close Open Session) only closes the database record; it does not
+disconnect access on FortiGate. For older containers where the log file has not
+been created yet, initialize it as the PHP user before following it:
 
 ```bash
+sudo docker exec -u www-data radiusdesk touch /var/www/html/cake4/rd_cake/logs/debug.log
 sudo docker exec -it radiusdesk sh -c 'tail -n 0 -F /var/www/html/cake4/rd_cake/logs/debug.log | grep --line-buffered -Ei "fortigate.?disconnect"'
 ```
 
