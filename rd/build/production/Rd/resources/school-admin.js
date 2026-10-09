@@ -34,6 +34,24 @@
                 }, failure:reject});
         });
     }
+    // SQL accounting timestamps are UTC; never interpret them as browser local time.
+    function accountingTime(value) {
+        if (!value) return NaN;
+        var text = String(value).replace(' ', 'T');
+        if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(text)) text += 'Z';
+        return Date.parse(text);
+    }
+    function duration(seconds) {
+        seconds = Math.max(0, Math.floor(seconds));
+        return [Math.floor(seconds/3600), Math.floor(seconds%3600/60), seconds%60]
+            .map(function (n) { return String(n).padStart(2, '0'); }).join(':');
+    }
+    function tickSessions() {
+        document.querySelectorAll('[data-school-seconds]').forEach(function (cell) {
+            var elapsed = Math.max(0, (Date.now() - Number(cell.dataset.schoolAnchor))/1000);
+            cell.textContent = duration(Number(cell.dataset.schoolSeconds) + elapsed);
+        });
+    }
     function render(node, users, nas, profiles, sessions) {
         var u = {};
         (users.items || []).forEach(function (row) {
@@ -43,13 +61,13 @@
         });
         var total = Number(u.total || 0), online = Number(u.online || 0);
         var percent = total ? Math.min(100, Math.round(100 * online / total)) : 0;
-        var cards = [[total,'บัญชีผู้ใช้','mint','fa-users'],[online,'ผู้ใช้ออนไลน์','purple','fa-wifi'],
+        var cards = [[total,'บัญชีผู้ใช้','mint','fa-users'],[online+' / '+total,'ผู้ใช้ออนไลน์ / ผู้ใช้ทั้งหมด','purple','fa-wifi'],
             [nas.totalCount,'NAS ที่กำหนดไว้','blue','fa-server'],[profiles.totalCount,'นโยบายผู้ใช้','peach','fa-sliders']];
         var html = '<header><small>NETWORK MANAGEMENT</small><h2>Dashboard</h2></header><div class="school-stats">';
         cards.forEach(function (card) {
             html += '<article class="school-stat '+card[2]+'"><strong>'+escape(card[0])+'</strong><span>'+card[1]+'</span><i class="fa '+card[3]+'" aria-hidden="true"></i></article>';
         });
-        html += '</div><div class="school-panels"><section class="school-widget"><h3>สถานะผู้ใช้</h3><div class="school-donut" style="--online:'+percent+'%"><div><strong>'+online+'</strong></div></div><div class="school-legend"><span>● ออนไลน์ '+online+'</span></div></section>';
+        html += '</div><div class="school-panels"><section class="school-widget"><h3>สถานะผู้ใช้</h3><div class="school-donut" style="--online:'+percent+'%"><div><strong>'+online+' / '+total+'</strong><span>ออนไลน์ '+percent+'%</span></div></div><div class="school-legend"><span style="color:#50bc98">● ออนไลน์ '+online+'</span><span style="color:#8592a3">● ออฟไลน์ '+Math.max(0,total-online)+'</span></div></section>';
         html += '<section class="school-widget"><h3>สรุปบัญชีและนโยบาย</h3><dl>';
         [[total,'ผู้ใช้ทั้งหมด'],[u.suspended || 0,'บัญชีถูกระงับ'],[u.expired || 0,'บัญชีหมดอายุ'],[nas.totalCount,'NAS ที่ลงทะเบียน'],[profiles.totalCount,'Profiles']].forEach(function (item) {
             html += '<div><dt>'+item[1]+'</dt><dd>'+escape(item[0])+'</dd></div>';
@@ -58,11 +76,18 @@
         var rows = sessions.items || [];
         rows.forEach(function (row) {
             var seconds = Math.max(0, Number(row.acctsessiontime) || 0);
-            var duration = [Math.floor(seconds/3600),Math.floor(seconds%3600/60),seconds%60].map(function (n) {return String(n).padStart(2,'0');}).join(':');
-            html += '<tr><td>'+escape(row.username)+'</td><td>'+escape(row.framedipaddress || '—')+'</td><td>'+escape(row.nasipaddress || '—')+'</td><td>'+escape(row.acctstarttime)+'</td><td>'+duration+'</td></tr>';
+            var updated = accountingTime(row.acctupdatetime);
+            var started = accountingTime(row.acctstarttime);
+            // Anchor to the last accounting update, with start time as a fallback.
+            var anchor = Number.isFinite(updated) ? updated : (Number.isFinite(started) ? started : Date.now());
+            if (!Number.isFinite(updated) && Number.isFinite(started)) seconds = 0;
+            var startLabel = Number.isFinite(started) ? new Date(started).toLocaleString('th-TH', {
+                year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+            }) : row.acctstarttime;
+            html += '<tr><td>'+escape(row.username)+'</td><td>'+escape(row.framedipaddress || '—')+'</td><td>'+escape(row.nasipaddress || '—')+'</td><td>'+escape(startLabel)+'</td><td data-school-seconds="'+seconds+'" data-school-anchor="'+anchor+'">'+duration(seconds + Math.max(0,(Date.now()-anchor)/1000))+'</td></tr>';
         });
         if (!rows.length) html += '<tr><td colspan="5" class="school-empty">ยังไม่มีผู้ใช้ออนไลน์</td></tr>';
-        node.innerHTML = html + '</tbody></table></div></section>';
+        node.innerHTML = html + '</tbody></table></div></section><p class="school-note">อัปเดตข้อมูลทุก 5 วินาที · ล่าสุด '+escape(new Date().toLocaleTimeString('th-TH'))+'</p>';
     }
     function populate() {
         if (window.schoolUi.enabled) {
@@ -81,18 +106,30 @@
                 if (logo.alt !== 'โลโก้โรงเรียน') logo.alt = 'โลโก้โรงเรียน';
             });
         }
-        document.querySelectorAll('[data-school-dashboard]:not([data-loaded])').forEach(function (node) {
-            node.dataset.loaded = 'true';
+        refreshDashboards(false);
+    }
+    function refreshDashboards(force) {
+        if (!window.schoolUi.enabled || document.hidden) return;
+        document.querySelectorAll('[data-school-dashboard]').forEach(function (node) {
+            if (node.schoolLoading || (!force && Date.now() - (node.schoolUpdated || 0) < 5000)) return;
+            node.schoolLoading = true;
             var cloud = node.dataset.schoolDashboard;
             Promise.all([
                 request('dashboard/users-items',{cloud_id:cloud}),
                 request('nas/index',{cloud_id:cloud,limit:1,page:1,start:0}),
                 request('profiles/index',{cloud_id:cloud,limit:1,page:1,start:0}),
                 request('radaccts/index',{cloud_id:cloud,only_connected:'true',limit:100,page:1,start:0,sort:'acctstarttime',dir:'DESC'})
-            ]).then(function (data) {if (node.isConnected) render(node,data[0],data[1],data[2],data[3]);})
-              .catch(function () {if (node.isConnected) node.textContent = 'ไม่สามารถโหลด Dashboard ได้';});
+            ]).then(function (data) {
+                if (node.isConnected) render(node,data[0],data[1],data[2],data[3]);
+            }).catch(function () {
+                if (node.isConnected && !node.schoolUpdated) node.textContent = 'ไม่สามารถโหลด Dashboard ได้';
+            }).then(function () {
+                node.schoolUpdated = Date.now();
+                node.schoolLoading = false;
+            });
         });
     }
+
     function install() {
         if (!window.Ext || !Ext.Ajax || !Ext.data || !Ext.data.Store) return false;
         var originalLoad = Ext.data.Store.prototype.load;
@@ -115,6 +152,19 @@
             }
             return originalLoad.apply(this, arguments);
         };
+        var refreshTimer;
+        Ext.Ajax.on('requestcomplete', function (connection, response, options) {
+            if (options.schoolRaw) return;
+            var method = String(options.method || 'GET').toUpperCase();
+            if (method === 'GET' && !/\/(add|edit|delete|remove|enable|disable)[^/]*\.json/.test(options.url || '')) return;
+            try { if (JSON.parse(response.responseText).success === false) return; } catch (error) { return; }
+            clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(function () { refreshDashboards(true); }, 300);
+        });
+        setInterval(function () { tickSessions(); refreshDashboards(false); }, 1000);
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) { tickSessions(); refreshDashboards(true); }
+        });
         Ext.Ajax.on('requestcomplete',function (connection, response, options) {
             if (!window.schoolUi.enabled || options.schoolRaw || !/\/dashboard\//.test(options.url)) return;
             var data;
