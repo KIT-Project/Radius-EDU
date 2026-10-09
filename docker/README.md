@@ -133,14 +133,19 @@ RADIUS reply attributes `Session-Timeout := 28800` (8 hours per login) and
 `Idle-Timeout := 1800` (30 minutes). Explicit user/profile reply values take
 precedence. Existing remaining-time quota and expiration policies can shorten
 the session limit. These defaults are applied to new authentications, not sessions
-that are already connected. The school Profile add/edit screen now offers a simple
-session-duration dropdown (30 minutes, 1/2/4/8/12/24 hours), saving a standard
-`Session-Timeout := <seconds>` reply without requiring the attribute editor.
-Saving this simplified screen replaces the managed `SimpleAdd_<id>` component's
-legacy quota, speed, time-slot and simultaneous-session entries with the selected
-session limit. Other attached components are not modified. Existing sessions must
+that are already connected. The school Profile create/edit screen asks only for a name. Creating a Profile uses
+an 8-hour default; renaming one preserves its existing timeout. The separate
+**ตั้งเวลา Session** toolbar/context-menu action accepts a positive integer and
+**minutes** or **hours**, converting the value on the server to the standard
+`Session-Timeout := <seconds>` reply. Values are limited to at most seven days.
+For example, 90 minutes becomes 5400 seconds and 8 hours becomes 28800 seconds.
+Saving session settings replaces the managed `SimpleAdd_<id>` component's legacy
+quota, speed, time-slot and simultaneous-session entries with the selected session
+limit. Other attached components are not modified. Existing sessions must
 authenticate again to receive a changed duration. Idle enforcement remains a
-FortiGate setting, as described below.
+FortiGate setting, as described below. The school UI removes the legacy FUP and
+advanced component edit actions.
+
 
 FortiGate must enforce the RADIUS session limit and the actual traffic idle timer:
 

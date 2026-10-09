@@ -217,44 +217,106 @@
         if (!rows.length) html += '<tr><td colspan="5" class="school-empty">ยังไม่มีผู้ใช้ออนไลน์</td></tr>';
         node.innerHTML = html + '</tbody></table></div></section>';
     }
+    function sessionSettings(grid, record) {
+        if (!record) { Ext.Msg.alert('ตั้งเวลา Session','กรุณาเลือก Profile ก่อน'); return; }
+        var cloud = Ext.getApplication().getCloudId();
+        var form = Ext.create('Ext.form.Panel', {
+            bodyPadding:24,defaults:{labelAlign:'top',anchor:'100%',margin:'0 0 18 0'},
+            layout:'anchor',items:[
+                {xtype:'numberfield',name:'session_amount',fieldLabel:'ระยะเวลาต่อการเข้าสู่ระบบ',
+                    value:8,minValue:1,maxValue:168,allowDecimals:false,allowBlank:false},
+                {xtype:'combobox',name:'session_unit',fieldLabel:'หน่วยเวลา',value:'hours',
+                    store:{fields:['value','label'],data:[{value:'minutes',label:'นาที'},{value:'hours',label:'ชั่วโมง'}]},
+                    queryMode:'local',editable:false,forceSelection:true,allowBlank:false,
+                    displayField:'label',valueField:'value',listeners:{change:function (field,unit) {
+                        field.up('form').down('[name=session_amount]').setMaxValue(unit === 'minutes' ? 10080 : 168);
+                    }}},
+                {xtype:'component',html:'ครบเวลาระบบจะให้เข้าสู่ระบบใหม่ การเปลี่ยนเวลามีผลในการ login ครั้งถัดไป'}
+            ]
+        });
+        var win = Ext.create('Ext.window.Window', {
+            title:'ตั้งเวลา Session — '+record.get('name'),width:Math.min(460,window.innerWidth-32),
+            modal:true,resizable:false,layout:'fit',items:form,
+            buttons:[{text:'ยกเลิก',handler:function () {win.close();}},
+                {text:'บันทึก',disabled:true,itemId:'saveSession',handler:function (button) {
+                    if (!form.getForm().isValid()) return;
+                    button.disable();
+                    var params = form.getForm().getValues();
+                    params.id = record.getId(); params.cloud_id = cloud; params.school_session_settings = '1';
+                    Ext.Ajax.request({url:'/cake4/rd_cake/profiles/simple_edit.json',method:'POST',params:params,
+                        success:function (response) {
+                            var result;
+                            try {result = JSON.parse(response.responseText);} catch (_) {}
+                            if (!result || !result.success) {
+                                button.enable(); Ext.Msg.alert('บันทึกไม่สำเร็จ',escape(result && result.message || 'กรุณาลองใหม่')); return;
+                            }
+                            win.close(); grid.getStore().reload();
+                        },failure:function () {button.enable(); Ext.Msg.alert('บันทึกไม่สำเร็จ','ไม่สามารถเชื่อมต่อระบบได้');}
+                    });
+                }}]
+        });
+        win.show(); form.setLoading(true);
+        request('profiles/simple_view',{profile_id:record.getId(),cloud_id:cloud}).then(function (result) {
+            if (win.destroyed) return;
+            var seconds = Number(result.data.school_session_timeout) || 28800;
+            var hours = seconds % 3600 === 0;
+            form.down('[name=session_unit]').setValue(hours ? 'hours' : 'minutes');
+            form.down('[name=session_amount]').setValue(hours ? seconds/3600 : Math.ceil(seconds/60));
+            form.setLoading(false); win.down('#saveSession').enable();
+        }).catch(function () {
+            if (win.destroyed) return;
+            win.close(); Ext.Msg.alert('โหลดข้อมูลไม่สำเร็จ','กรุณาเปิดการตั้งเวลาใหม่อีกครั้ง');
+        });
+    }
     function populate() {
         if (window.schoolUi.enabled) {
             Ext.ComponentQuery.query('pnlAddEditProfile').forEach(function (form) {
                 if (form.schoolSessionStyled) return;
                 form.schoolSessionStyled = true;
+                form.setTitle(form.profileId ? 'แก้ไขชื่อ Profile' : 'สร้าง Profile');
+                var name = form.down('[name=name]');
+                if (name) name.setFieldLabel('ชื่อ Profile');
                 var limits = form.items.getAt(1);
                 if (limits) {
                     limits.query('field').forEach(function (field) { field.disable(); });
                     limits.hide();
                 }
                 var general = form.items.getAt(0);
-                if (general) general.setHeight(form.profileId ? 140 : 210);
+                if (general) {
+                    general.query('checkbox').forEach(function (field) { field.hide(); });
+                    general.setHeight(110);
+                }
+                form.add({xtype:'hiddenfield',name:'school_profile_name_only',value:'1'});
                 form.add({xtype:'hiddenfield',name:'school_session_policy',value:'1'});
-                form.add({
-                    xtype:'panel',title:'ระยะเวลาการใช้งาน',width:'100%',bodyPadding:24,
-                    items:[{
-                        xtype:'combobox',name:'school_session_timeout',fieldLabel:'เวลาใช้งานต่อ login',
-                        labelAlign:'top',width:Math.min(420,Math.max(240,window.innerWidth-160)),queryMode:'local',editable:false,
-                        allowBlank:false,forceSelection:true,displayField:'label',valueField:'seconds',value:28800,
-                        store:{fields:['seconds','label'],data:[
-                            {seconds:1800,label:'30 นาที'},{seconds:3600,label:'1 ชั่วโมง'},
-                            {seconds:7200,label:'2 ชั่วโมง'},{seconds:14400,label:'4 ชั่วโมง'},
-                            {seconds:28800,label:'8 ชั่วโมง'},{seconds:43200,label:'12 ชั่วโมง'},
-                            {seconds:86400,label:'24 ชั่วโมง'}
-                        ]},
-                        listeners:{change:function (field,value) {
-                            if (value && field.getStore().findExact('seconds',Number(value)) === -1) {
-                                field.getStore().add({seconds:Number(value),label:'ค่าปัจจุบัน: '+Number(value)/60+' นาที'});
-                            }
-                        }}
-                    },{
-                        xtype:'component',margin:'18 0 0 0',
-                        html:'<p>ครบเวลาที่เลือก ระบบจะให้เข้าสู่ระบบใหม่ โดยเริ่มนับเวลาใหม่ทุกครั้งที่ login</p><p>เวลาที่เปลี่ยนจะใช้ในการเข้าสู่ระบบครั้งถัดไป</p>'
-                    }]
-                });
+                form.add({xtype:'hiddenfield',name:'school_session_timeout',value:28800});
                 form.updateLayout();
-                // The original show handler may already have loaded before this adapter ran.
                 if (form.profileId) form.getController().loadProfileContent();
+            });
+            Ext.ComponentQuery.query('gridProfiles #fup, gridProfiles #advanced_edit, gridProfiles #profile_components').forEach(function (button) {
+                if (!button.hidden) button.hide();
+            });
+            Ext.ComponentQuery.query('gridProfiles').forEach(function (grid) {
+                if (grid.schoolSessionGrid) return;
+                var toolbar = grid.getDockedItems('toolbar[dock="top"]')[0];
+                if (!toolbar) return;
+                grid.schoolSessionGrid = true;
+                grid.columns.forEach(function (column) {
+                    if (column.dataIndex === 'profile_components' || column.dataIndex === 'for_system') column.hide();
+                });
+                if (grid.menu_grid) {
+                    var items = grid.menu_grid.items.getRange();
+                    items.forEach(function (item, index) {
+                        if (index === 0) item.setText('แก้ไขชื่อ');
+                        else grid.menu_grid.remove(item, true);
+                    });
+                    grid.menu_grid.add({text:'ตั้งเวลา Session',handler:function () {
+                        sessionSettings(grid, grid.selRecord || grid.getSelectionModel().getSelection()[0]);
+                    }});
+                }
+                toolbar.add({xtype:'button',text:'ตั้งเวลา Session',itemId:'schoolSessionSettings',
+                    glyph:Rd.config.icnClock || Rd.config.icnEdit,
+                    handler:function () { sessionSettings(grid, grid.getSelectionModel().getSelection()[0]); }
+                });
             });
             // Header controls remain instantiated so default-cloud selection keeps working.
             Ext.ComponentQuery.query('#cmbCloud, #btnSetupWizard').forEach(function (component) {

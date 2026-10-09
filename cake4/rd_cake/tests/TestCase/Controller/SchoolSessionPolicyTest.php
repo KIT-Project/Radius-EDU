@@ -57,6 +57,18 @@ class SchoolSessionPolicyTest extends TestCase {
         $this->assertSame(':=', $reply->op);
     }
 
+    public function testSessionSettingsConvertUnitsOnServerBeforeSaving(): void {
+        $controller = $this->controller([
+            'school_session_settings' => '1', 'session_amount' => '90', 'session_unit' => 'minutes',
+            'school_session_timeout' => '1'
+        ]);
+        $controller->Radgroupchecks = $this->table();
+        $controller->Radgroupreplies = $this->table();
+        $this->assertTrue($this->invoke($controller, '_validateSchoolSessionPolicy'));
+        $this->invoke($controller, '_doRadius', 'SimpleAdd_46');
+        $this->assertSame('5400', $controller->Radgroupreplies->saved[0]->value);
+    }
+
     public function testEditLoadsPreviouslySavedSessionDuration(): void {
         $controller = $this->controller([]);
         $controller->Radgroupchecks = $this->table();

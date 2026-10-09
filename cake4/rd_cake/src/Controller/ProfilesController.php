@@ -13,6 +13,7 @@ use Cake\Core\Configure\Engine\PhpConfig;
 
 use Cake\Event\Event;
 use Cake\Utility\Inflector;
+use App\Utility\SchoolSessionDuration;
 
 
 class ProfilesController extends AppController
@@ -417,6 +418,10 @@ class ProfilesController extends AppController
 		
 		$this->reqData	= $this->request->getData();
         if (!$this->_validateSchoolSessionPolicy()) { return; }
+        if (($this->reqData['school_session_settings'] ?? null) === '1') {
+            $this->_saveSchoolSessionSettings();
+            return;
+        }
 
         $check_items = [
 			'data_limit_mac',
@@ -535,7 +540,9 @@ class ProfilesController extends AppController
               
         $this->{$this->main_model}->patchEntity($entity, $this->reqData);      
         if ($this->{$this->main_model}->save($entity)) {
-            $this->_doRadius($pc_name);     
+            if (($this->reqData['school_profile_name_only'] ?? null) !== '1') {
+                $this->_doRadius($pc_name);
+            }
             $this->set(array(
                 'success' => true
             ));
@@ -980,7 +987,49 @@ class ProfilesController extends AppController
                     
     }
     
+    private function _saveSchoolSessionSettings(): void {
+        $id = filter_var($this->reqData['id'] ?? null, FILTER_VALIDATE_INT);
+        $cloud = filter_var($this->reqData['cloud_id'] ?? null, FILTER_VALIDATE_INT);
+        $profile = $id && $cloud ? $this->Profiles->find()->where([
+            'Profiles.id' => $id,
+            'Profiles.cloud_id IN' => [$cloud, -1]
+        ])->first() : null;
+        if (!$profile) {
+            $this->set(['success' => false, 'message' => 'ไม่พบ Profile ในระบบที่เลือก']);
+            $this->viewBuilder()->setOption('serialize', true);
+            return;
+        }
+        $group = $this->profCompPrefix.$profile->id;
+        $this->Radgroupreplies->getConnection()->transactional(function () use ($profile, $group) {
+            if (!$this->ProfileComponents->find()->where(['name' => $group, 'cloud_id' => $profile->cloud_id])->first()) {
+                $this->ProfileComponents->saveOrFail($this->ProfileComponents->newEntity([
+                    'name' => $group, 'cloud_id' => $profile->cloud_id
+                ]));
+            }
+            if (!$this->Radusergroups->find()->where(['username' => $profile->name, 'groupname' => $group])->first()) {
+                $this->Radusergroups->saveOrFail($this->Radusergroups->newEntity([
+                    'username' => $profile->name, 'groupname' => $group, 'priority' => 5
+                ]));
+            }
+            $this->_doRadius($group);
+        });
+        $this->set(['success' => true, 'session_timeout' => $this->reqData['school_session_timeout']]);
+        $this->viewBuilder()->setOption('serialize', true);
+    }
+
     private function _validateSchoolSessionPolicy(): bool {
+        if (($this->reqData['school_session_settings'] ?? null) === '1') {
+            try {
+                $this->reqData['school_session_timeout'] = SchoolSessionDuration::seconds(
+                    $this->reqData['session_amount'] ?? null, $this->reqData['session_unit'] ?? null
+                );
+                $this->reqData['school_session_policy'] = '1';
+            } catch (\InvalidArgumentException $error) {
+                $this->set(['success' => false, 'message' => $error->getMessage()]);
+                $this->viewBuilder()->setOption('serialize', true);
+                return false;
+            }
+        }
         if (($this->reqData['school_session_policy'] ?? null) !== '1') { return true; }
         $seconds = filter_var($this->reqData['school_session_timeout'] ?? null, FILTER_VALIDATE_INT);
         if ($seconds === false || $seconds < 60 || $seconds > 604800) {
