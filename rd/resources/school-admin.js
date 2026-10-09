@@ -102,6 +102,32 @@
                     if (item.dock === 'bottom' && !item.hidden) item.hide();
                 });
             });
+            Ext.ComponentQuery.query('pnlLogin').forEach(function (panel) {
+                if (!panel.hasCls('school-login-page')) panel.addCls('school-login-page');
+            });
+            Ext.ComponentQuery.query('#winLogin').forEach(function (card) {
+                if (card.schoolLoginStyled) return;
+                var form = card.down('form');
+                if (!form) return;
+                card.schoolLoginStyled = true;
+                card.addCls('school-login-card');
+                card.setWidth(Math.min(420, Math.max(280, window.innerWidth - 32)));
+                card.setHeight(530);
+                form.items.getAt(0).update('<div class="school-login-intro"><img src="resources/images/logo-edu.jpg" alt="ตราโรงเรียน"><span>SMART SCHOOL</span><h2>เข้าสู่ระบบจัดการ</h2></div>');
+                form.items.getAt(1).update('<p class="school-login-description">จัดการผู้ใช้และเครือข่าย Wi-Fi ของโรงเรียน</p>');
+                var username = form.down('#inpUsername');
+                var password = form.down('#inpPassword');
+                username.setFieldLabel('ชื่อผู้ใช้');
+                username.setEmptyText('ชื่อผู้ดูแลระบบ');
+                password.setFieldLabel('รหัสผ่าน');
+                password.setEmptyText('กรอกรหัสผ่าน');
+                var button = form.down('button[type="submit"]');
+                button.setText('เข้าสู่ระบบ');
+                button.setWidth(card.getWidth() - 64);
+                button.setMargin('16 10 0 10');
+                card.updateLayout();
+                card.center();
+            });
             document.querySelectorAll('[id^="tbtext-"] h1').forEach(function (heading) {
                 Array.from(heading.childNodes).forEach(function (node) {
                     if (node.nodeType === Node.TEXT_NODE && node.textContent.indexOf('RADIUSdesk') !== -1) {
