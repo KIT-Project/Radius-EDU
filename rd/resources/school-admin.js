@@ -74,22 +74,13 @@
             .sort(function (a,b) { return b.total-a.total || a.username.localeCompare(b.username); });
     }
     function requestTraffic(cloud) {
-        var day = 86400000;
-        var start = Math.floor((Date.now()+7*3600000)/day)*day-7*3600000;
-        var filter = JSON.stringify([
-            {property:'acctstarttime',operator:'gt',value:new Date(start-day).toISOString().slice(0,10)},
-            {property:'acctstarttime',operator:'lt',value:new Date(start+2*day).toISOString().slice(0,10)}
-        ]);
         var rows = [];
         function page(offset) {
             return request('radaccts/index',{cloud_id:cloud,limit:500,page:offset/500+1,start:offset,
-                sort:'radacctid',dir:'ASC',filter:filter}).then(function (data) {
+                sort:'radacctid',dir:'ASC'}).then(function (data) {
                 rows = rows.concat(data.items || []);
                 if (offset+500 < Number(data.totalCount) && (data.items || []).length) return page(offset+500);
-                return {items:rows.filter(function (row) {
-                    var timestamp = accountingTime(row.acctstarttime);
-                    return timestamp >= start && timestamp < start+day;
-                })};
+                return {items:rows};
             });
         }
         return page(0);
@@ -110,14 +101,14 @@
             html += '<article class="school-stat '+card[2]+'"><strong>'+escape(card[0])+'</strong><span>'+card[1]+'</span><i class="fa '+card[3]+'" aria-hidden="true"></i></article>';
         });
         html += '</div><div class="school-panels"><section class="school-widget"><h3>สถานะผู้ใช้</h3><div class="school-donut" style="--online:'+percent+'%"><div><strong>'+online+' / '+total+'</strong><span>ออนไลน์ '+percent+'%</span></div></div><div class="school-legend"><span style="color:#50bc98">● ออนไลน์ '+online+'</span><span style="color:#8592a3">● ออฟไลน์ '+Math.max(0,total-online)+'</span></div></section>';
-        html += '<section class="school-widget"><h3>ผู้ใช้ที่ใช้ Traffic สูงสุดวันนี้</h3><div class="school-traffic">';
+        html += '<section class="school-widget"><h3>ผู้ใช้ที่ใช้ Traffic สูงสุด</h3><div class="school-traffic">';
         var ranking = trafficRanking(traffic && traffic.items);
         var trafficTotal = ranking.reduce(function (sum,user) { return sum+user.total; },0);
         ranking.slice(0,5).forEach(function (user,index) {
             var share = Math.round(user.total/trafficTotal*100);
             html += '<div class="school-traffic-row"><span class="school-traffic-rank">'+(index+1)+'</span><div class="school-traffic-detail"><div class="school-traffic-heading"><strong>'+escape(user.username)+'</strong><b>'+bytes(user.total)+'</b></div><div class="school-traffic-bar"><i style="width:'+share+'%"></i></div><div class="school-traffic-meta"><span>↓ '+bytes(user.download)+' · ↑ '+bytes(user.upload)+'</span><span>'+share+'%</span></div></div></div>';
         });
-        if (!ranking.length) html += '<p class="school-empty">ยังไม่มีข้อมูลปริมาณการใช้งานวันนี้</p>';
+        if (!ranking.length) html += '<p class="school-empty">ยังไม่มีข้อมูลปริมาณการใช้งาน</p>';
         html += '</div></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
         var rows = sessions.items || [];
         rows.forEach(function (row) {
