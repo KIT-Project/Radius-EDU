@@ -91,13 +91,16 @@
     }
     function populate() {
         if (window.schoolUi.enabled) {
-            // Keep the existing default-cloud selection and API scope; hide only its header control.
-            Ext.ComponentQuery.query('pnlDashboard #cmbCloud').forEach(function (combo) {
-                if (combo.schoolCloudHidden) return;
-                combo.schoolCloudHidden = true;
-                combo.hide();
-                var separator = combo.nextSibling();
-                if (separator && separator.isXType('tbseparator')) separator.hide();
+            // Header controls remain instantiated so default-cloud selection keeps working.
+            Ext.ComponentQuery.query('#cmbCloud, #btnSetupWizard').forEach(function (component) {
+                if (!component.hidden) component.hide();
+                var separator = component.nextSibling();
+                if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
+            });
+            Ext.ComponentQuery.query('pnlLogin').forEach(function (panel) {
+                panel.getDockedItems().forEach(function (item) {
+                    if (item.dock === 'bottom' && !item.hidden) item.hide();
+                });
             });
             document.querySelectorAll('[id^="tbtext-"] h1').forEach(function (heading) {
                 Array.from(heading.childNodes).forEach(function (node) {
