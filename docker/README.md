@@ -35,9 +35,9 @@ The docker_hub Compose file runs an upstream prebuilt image, not EDU 1.0.0.
 
 The dedicated portal mapping is `${PORTAL_HTTP_PORT:-443}:550` (host:container).
 Configure `PORTAL_HTTP_PORT=443` in `docker/.env`. Admin uses `${ADMIN_HTTP_PORT:-8000}:443` on host port 8000;
-port 443 serves only `/login/bootstrap5/` and its static assets.
+port 443 serves `/login/` (and the original `/login/bootstrap5/`) and its static assets.
 
-Set FortiGate external portal URL to `https://<SERVER_LAN_IP>/login/bootstrap5/`.
+Set FortiGate external portal URL to `https://<SERVER_LAN_IP>/login/`.
 Use the server IP reachable from the Wi-Fi client VLAN, not `localhost` or a container IP.
 Allow unauthenticated clients to reach this IP and TCP port in FortiGate's portal access rules.
 Both web listeners use HTTPS. Host port variables retain their existing names for compatibility.
@@ -49,7 +49,7 @@ and rebuild the image. Do not set this origin to the RADIUSdesk server's portal 
 FortiGate creates the authenticated session and reports it to RADIUS via UDP 1813;
 the portal path itself is not a session creation or disconnect API.
 
-Verify locally: `https://localhost/login/bootstrap5/`.
+Verify locally: `https://localhost/login/`.
 Changing the port mapping alone requires `docker compose up -d`; changing the baked
 Nginx config or frontend assets requires `docker compose build radiusdesk` first.
 
@@ -88,6 +88,10 @@ sudo docker compose up -d
 
 This mapping update does not require rebuilding an existing HTTPS image.
 Admin remains at `https://<SERVER_LAN_IP>:8000/`; the portal is now
-`https://<SERVER_LAN_IP>/login/bootstrap5/`. Update the FortiGate external portal
+`https://<SERVER_LAN_IP>/login/`. Update the FortiGate external portal
 URL and allow unauthenticated clients to reach server TCP 443.
 Existing certificates are preserved because the server address is unchanged.
+
+The short `/login/` path is an internal Nginx rewrite to the existing portal files;
+relative assets and FortiGate query parameters are preserved. After pulling this
+path change, run `sudo docker compose up -d --build` from `docker/`.
