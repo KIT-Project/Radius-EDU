@@ -69,7 +69,7 @@
         });
         html += '</div><div class="school-panels"><section class="school-widget"><h3>สถานะผู้ใช้</h3><div class="school-donut" style="--online:'+percent+'%"><div><strong>'+online+' / '+total+'</strong><span>ออนไลน์ '+percent+'%</span></div></div><div class="school-legend"><span style="color:#50bc98">● ออนไลน์ '+online+'</span><span style="color:#8592a3">● ออฟไลน์ '+Math.max(0,total-online)+'</span></div></section>';
         html += '<section class="school-widget"><h3>สรุปบัญชีและนโยบาย</h3><dl>';
-        [[total,'ผู้ใช้ทั้งหมด'],[u.suspended || 0,'บัญชีถูกระงับ'],[u.expired || 0,'บัญชีหมดอายุ'],[nas.totalCount,'NAS ที่ลงทะเบียน'],[profiles.totalCount,'Profiles']].forEach(function (item) {
+        [[total,'ผู้ใช้ทั้งหมด'],[nas.totalCount,'NAS ที่ลงทะเบียน'],[profiles.totalCount,'Profiles']].forEach(function (item) {
             html += '<div><dt>'+item[1]+'</dt><dd>'+escape(item[0])+'</dd></div>';
         });
         html += '</dl></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
