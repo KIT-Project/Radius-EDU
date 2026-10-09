@@ -118,7 +118,7 @@
             html += '<div class="school-traffic-row"><span class="school-traffic-rank">'+(index+1)+'</span><div class="school-traffic-detail"><div class="school-traffic-heading"><strong>'+escape(user.username)+'</strong><b>'+bytes(user.total)+'</b></div><div class="school-traffic-bar"><i style="width:'+share+'%"></i></div><div class="school-traffic-meta"><span>↓ '+bytes(user.download)+' · ↑ '+bytes(user.upload)+'</span><span>'+share+'%</span></div></div></div>';
         });
         if (!ranking.length) html += '<p class="school-empty">ยังไม่มีข้อมูลปริมาณการใช้งานวันนี้</p>';
-        html += '</div><p class="school-note">รวม session ที่เริ่มวันนี้ · ยอดตาม Accounting ล่าสุด</p></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
+        html += '</div></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
         var rows = sessions.items || [];
         rows.forEach(function (row) {
             var seconds = Math.max(0, Number(row.acctsessiontime) || 0);
@@ -133,7 +133,7 @@
             html += '<tr><td>'+escape(row.username)+'</td><td>'+escape(row.framedipaddress || '—')+'</td><td>'+escape(row.nasipaddress || '—')+'</td><td>'+escape(startLabel)+'</td><td data-school-seconds="'+seconds+'" data-school-anchor="'+anchor+'">'+duration(seconds + Math.max(0,(Date.now()-anchor)/1000))+'</td></tr>';
         });
         if (!rows.length) html += '<tr><td colspan="5" class="school-empty">ยังไม่มีผู้ใช้ออนไลน์</td></tr>';
-        node.innerHTML = html + '</tbody></table></div></section><p class="school-note">อัปเดตข้อมูลทุก 5 วินาที · ล่าสุด '+escape(new Date().toLocaleTimeString('th-TH'))+'</p>';
+        node.innerHTML = html + '</tbody></table></div></section>';
     }
     function populate() {
         if (window.schoolUi.enabled) {
@@ -142,6 +142,9 @@
                 if (!component.hidden) component.hide();
                 var separator = component.nextSibling();
                 if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
+            });
+            Ext.ComponentQuery.query('pnlDashboard toolbar tbseparator').forEach(function (separator) {
+                if (!separator.hidden) separator.hide();
             });
             Ext.ComponentQuery.query('pnlLogin').forEach(function (panel) {
                 panel.getDockedItems().forEach(function (item) {
