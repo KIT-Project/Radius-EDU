@@ -49,6 +49,7 @@ $config['nas_types'][5]     = ['name' => 'Mikrotik-API',	    'id' => 'Mikrotik-A
 $config['nas_types'][6]     = ['name' => 'Mikrotik-Rest-API',   'id' => 'Mikrotik-Rest-API','active' => true];
 $config['nas_types'][7]     = ['name' => 'Mikrotik-COA',	    'id' => 'Mikrotik-COA',   	'active' => true];
 $config['nas_types'][8]     = ['name' => 'Private PSK',	        'id' => 'private_psk',   	'active' => true];
+$config['nas_types'][9]     = ['name' => 'FortiGate-COA', 'id' => 'FortiGate-COA', 'active' => true];
 
 
 $config['radacct']['flag_stale_after'] = 2; //Flag an active entry as stale after sessiontime not updated for this many hours

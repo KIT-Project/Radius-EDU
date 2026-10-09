@@ -1,7 +1,8 @@
-/* School presentation layer. Server endpoints and their responses remain unchanged. */
+/* School interface and authenticated session controls. */
 (function () {
     'use strict';
     window.schoolUi = { enabled: true };
+    var disconnecting = new Set();
     var allowed = ['cPermanentUsers', 'cActivityMonitor', 'cSettings', 'cAccessProviders', 'cAuditLogs', 'cDynamicDetails'];
     function escape(value) {
         return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
@@ -197,7 +198,7 @@
             html += '<div class="school-traffic-row"><span class="school-traffic-rank">'+(index+1)+'</span><div class="school-traffic-detail"><div class="school-traffic-heading"><strong>'+escape(user.username)+'</strong><b>'+bytes(user.total)+'</b></div><div class="school-traffic-bar"><i style="width:'+share+'%"></i></div><div class="school-traffic-meta"><span>↓ '+bytes(user.download)+' · ↑ '+bytes(user.upload)+'</span><span>'+share+'%</span></div></div></div>';
         });
         if (!ranking.length) html += '<p class="school-empty">ยังไม่มีข้อมูลปริมาณการใช้งาน</p>';
-        html += '</div></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th></tr></thead><tbody>';
+        html += '</div></section></div><section class="school-widget school-online"><h3>ผู้ใช้ออนไลน์</h3><div class="school-table-scroll"><table><thead><tr><th>ชื่อผู้ใช้</th><th>IP ผู้ใช้</th><th>IP NAS / FortiGate</th><th>เริ่มเชื่อมต่อ</th><th>เวลาที่ใช้งาน</th><th></th></tr></thead><tbody>';
         var rows = sessions.items || [];
         rows.forEach(function (row) {
             var seconds = Math.max(0, Number(row.acctsessiontime) || 0);
@@ -209,9 +210,9 @@
             var startLabel = Number.isFinite(started) ? new Date(started).toLocaleString('th-TH', {
                 year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
             }) : row.acctstarttime;
-            html += '<tr><td>'+escape(row.username)+'</td><td>'+escape(row.framedipaddress || '—')+'</td><td>'+escape(row.nasipaddress || '—')+'</td><td>'+escape(startLabel)+'</td><td data-school-seconds="'+seconds+'" data-school-anchor="'+anchor+'">'+duration(seconds + Math.max(0,(Date.now()-anchor)/1000))+'</td></tr>';
+            html += '<tr><td>'+escape(row.username)+'</td><td>'+escape(row.framedipaddress || '—')+'</td><td>'+escape(row.nasipaddress || '—')+'</td><td>'+escape(startLabel)+'</td><td data-school-seconds="'+seconds+'" data-school-anchor="'+anchor+'">'+duration(seconds + Math.max(0,(Date.now()-anchor)/1000))+'</td><td><button type="button" class="school-disconnect" '+(disconnecting.has(String(row.radacctid)) ? 'disabled ' : '')+'data-school-disconnect="'+escape(row.radacctid)+'" data-school-user="'+escape(row.username)+'">ตัดการเชื่อมต่อ</button></td></tr>';
         });
-        if (!rows.length) html += '<tr><td colspan="5" class="school-empty">ยังไม่มีผู้ใช้ออนไลน์</td></tr>';
+        if (!rows.length) html += '<tr><td colspan="6" class="school-empty">ยังไม่มีผู้ใช้ออนไลน์</td></tr>';
         node.innerHTML = html + '</tbody></table></div></section>';
     }
     function populate() {
@@ -326,6 +327,34 @@
             }
             return originalLoad.apply(this, arguments);
         };
+        document.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-school-disconnect]');
+            if (!button || button.disabled) return;
+            var node = button.closest('[data-school-dashboard]');
+            var id = button.dataset.schoolDisconnect;
+            if (!node || !/^[1-9][0-9]*$/.test(id) || disconnecting.has(id)) return;
+            disconnecting.add(id);
+            Ext.Msg.confirm('ตัดการเชื่อมต่อ', 'ต้องการตัดการเชื่อมต่อของ '+escape(button.dataset.schoolUser)+' หรือไม่? ผู้ใช้ยัง login ใหม่ได้', function (answer) {
+                if (answer !== 'yes') { disconnecting.delete(id); return; }
+                button.disabled = true;
+                var params = {cloud_id:node.dataset.schoolDashboard};
+                params[id] = id;
+                Ext.Ajax.request({url:'/cake4/rd_cake/radaccts/kick_active.json',method:'GET',params:params,timeout:15000,
+                    success:function (response) {
+                        var data;
+                        try { data = JSON.parse(response.responseText); }
+                        catch (error) { Ext.Msg.alert('ตัดการเชื่อมต่อไม่สำเร็จ','คำตอบจากเซิร์ฟเวอร์ไม่ถูกต้อง'); return; }
+                        Ext.Msg.alert(data.success ? 'ผลการตัดการเชื่อมต่อ' : 'ตัดการเชื่อมต่อไม่สำเร็จ',escape(data.message || (data.data || {}).message || 'ไม่สามารถส่งคำสั่งได้'));
+                        refreshDashboards(true);
+                    },
+                    failure:function () { Ext.Msg.alert('ยังยืนยันผลไม่ได้','ไม่ได้รับคำตอบจากเซิร์ฟเวอร์ กรุณารีเฟรชตรวจสถานะ session'); },
+                    callback:function () {
+                        disconnecting.delete(id);
+                        document.querySelectorAll('[data-school-disconnect="'+id+'"]').forEach(function (current) { current.disabled = false; });
+                    }
+                });
+            });
+        });
         var refreshTimer;
         Ext.Ajax.on('requestcomplete', function (connection, response, options) {
             if (options.schoolRaw) return;

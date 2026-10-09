@@ -562,79 +562,85 @@ class RadacctsController extends AppController {
 	}
 	
 	
-	public function kickActiveUsername(){
-		//__ Authentication + Authorization __
+    public function kickActiveUsername(){
         $user = $this->_ap_right_check();
-        if(!$user){
+        if (!$user) return;
+        $query = $this->Radaccts->find()->where(['Radaccts.acctstoptime IS NULL']);
+        $username = $this->request->getQuery('username');
+        if (!$username) {
+            $this->set(['success'=>false,'message'=>'Required username missing']);
+            $this->viewBuilder()->setOption('serialize', true);
             return;
         }
-        
-        //It should have a token if it made it to here :-)
-        $q_data		= $this->request->getQuery();
-        $token 		= $q_data['token'];
-        $username 	= $q_data['username'];
-		$data		= [];
-		
-		
-		$e_username = $this->{$this->workingModel}->find()->where(['username' => $username,'acctstoptime IS NULL'])->all();
-		foreach($e_username as $ent){
-			$data = $this->Kicker->kick($ent,$token); //Sent it to the Kicker (We include the token in order to make API calls if needed
-		}	
-		$this->set([
-            'success'       => true,
-            'data'          => $data
-        ]);
-        $this->viewBuilder()->setOption('serialize', true);	
-	}
-	
+        if (!$this->_build_common_query($query, $user, true)) return;
+        $sessions = $query->limit(11)->all()->toArray();
+        if (count($sessions) > 10) {
+            $this->set(['success'=>false,'message'=>'ผู้ใช้นี้มีมากกว่า 10 sessions กรุณาเลือก session จาก Activity Monitor']);
+            $this->viewBuilder()->setOption('serialize', true);
+            return;
+        }
+        $this->sendSessionDisconnects($sessions, (string)$this->request->getQuery('token'));
+    }
 
     public function kickActive(){
-    
-        //__ Authentication + Authorization __
         $user = $this->_ap_right_check();
-        if(!$user){
+        if (!$user) return;
+        $ids = [];
+        foreach (array_keys($this->request->getQuery()) as $key) {
+            if (preg_match('/^[1-9][0-9]*$/', (string)$key)) $ids[] = (string)$key;
+        }
+        if (!$ids || count($ids) > 10) {
+            $this->set(['success'=>false,'message'=>'เลือก session ครั้งละ 1–10 รายการ']);
+            $this->viewBuilder()->setOption('serialize', true);
             return;
         }
-        
-        //It should have a token if it made it to here :-)
-        $q_data	= $this->request->getQuery();
-        $token 	= $q_data['token'];
+        $query = $this->Radaccts->find()->where(['Radaccts.radacctid IN'=>$ids]);
+        // Apply the same cloud/realm access scope used when listing accounting sessions.
+        if (!$this->_build_common_query($query, $user, true)) return;
+        $sessions = $query->all()->toArray();
+        if (count($sessions) !== count($ids)) {
+            $this->set(['success'=>false,'message'=>'ไม่พบ session หรือไม่มีสิทธิ์ตัด session ที่เลือก']);
+            $this->viewBuilder()->setOption('serialize', true);
+            return;
+        }
+        $this->sendSessionDisconnects($sessions, (string)$this->request->getQuery('token'));
+    }
 
-        
-        $some_session_closed    = false;
-        $count                  = 0;
-        $msg                    = 'Could not locate session';
-        $data                   = ['title' => 'Session Not Found', 'message' => $msg, 'type' =>'warn'];
-        $req_q      			= $this->request->getQuery();
-
-        foreach(array_keys($req_q) as $key){
-            if(preg_match('/^\d+/',$key)){
-                $ent = $this->{$this->workingModel}->find()->where(['radacctid' => $key])->first();
-                $count++;               
-                if($ent->acctstoptime !== null){
-                    $some_session_closed = true;
-                }else{
-                    $data = $this->Kicker->kick($ent,$token); //Sent it to the Kicker (We include the token in order to make API calls if needed
+    private function sendSessionDisconnects($sessions, string $token): void
+    {
+        $results = [];
+        $failed = false;
+        foreach ($sessions as $session) {
+            if ($session->acctstoptime !== null) {
+                $result = ['title'=>'Session closed','message'=>'Session นี้ปิดไปแล้ว','type'=>'error'];
+            } else {
+                // Do not use an old accounting row to disconnect a newer login at the same IP.
+                $latest = $this->Radaccts->find()->where([
+                    'username'=>$session->username, 'nasipaddress'=>$session->nasipaddress,
+                    'framedipaddress'=>$session->framedipaddress, 'acctstoptime IS NULL'
+                ])->order(['radacctid'=>'DESC'])->first();
+                if (!$latest || (string)$latest->radacctid !== (string)$session->radacctid) {
+                    $result = ['title'=>'Session changed','message'=>'มี session ใหม่แล้ว กรุณารีเฟรชและเลือก session ล่าสุด','type'=>'error'];
+                } else {
+                    $result = $this->Kicker->kick($session, $token);
+                    if (!$result) $result = ['title'=>'Disconnect sent','message'=>'ส่งคำสั่งแล้ว ยังไม่ได้ยืนยันผลจาก NAS','type'=>'info'];
                 }
             }
-        }  
-        
-        if($count >0){      
-            $data = ['title' => 'Disconnect Sent', 'message' => 'Disconnect Instructions Sent', 'type' =>'info'];
-        }   
-
-        if(($some_session_closed)&&($count>0)){
-            $msg = 'Sessions Is already Closed';
-            if($count > 1){
-                $msg = 'Some Sessions Are already Closed';
-            }
-            $data = ['title' => 'Session Closed Already', 'message' => $msg, 'type' =>'warn'];
+            $result['radacctid'] = $session->radacctid;
+            $results[] = $result;
+            if ($result['type'] === 'error') $failed = true;
         }
-    
-        $this->set([
-            'success'       => true,
-            'data'          => $data
-        ]);
+        $data = count($results) === 1 ? $results[0] : [
+            'title'=>$failed ? 'Disconnect incomplete' : 'Disconnect results',
+            'message'=>$failed ? 'บาง session ตัดไม่สำเร็จ กรุณาตรวจการตั้งค่า CoA ของ NAS' : 'ประมวลผลคำสั่งตัด session แล้ว',
+            'type'=>$failed ? 'error' : 'info'
+        ];
+        if (!$results) {
+            $failed = true;
+            $data = ['title'=>'Session not found','message'=>'ไม่พบ session ที่ออนไลน์','type'=>'error'];
+        }
+        // Do not update radacct or block the user/IP here. Accounting Stop closes the old row.
+        $this->set(['success'=>!$failed,'message'=>$data['message'],'data'=>$data,'results'=>$results]);
         $this->viewBuilder()->setOption('serialize', true);
     }
 

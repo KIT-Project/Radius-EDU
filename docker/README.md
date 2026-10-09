@@ -102,3 +102,35 @@ Login submissions use `/fgtauth?magic=<redirect-token>&auth=1`, matching the
 working external portal integration. The same token is retained in form data,
 along with the supplied login/post and client/AP fields. Credentials stay in
 the POST body, and redirect fields cannot overwrite username/password.
+
+## Disconnect a FortiGate captive-portal session
+
+In NAS settings, select **FortiGate-COA**, use the FortiGate NAS IP reported in
+Accounting, configure its existing RADIUS shared secret, and set **COA Port 3799**.
+On FortiGate, enable CoA on the RADIUS server used for this portal:
+
+```text
+config user radius
+    edit "Test"
+        set radius-coa enable
+    next
+end
+```
+
+Allow the RADIUS server to reach the FortiGate on UDP 3799. Existing RADIUS
+Accounting on UDP 1813 must remain enabled. The source IP of disconnect packets
+must match the RADIUS server configured on FortiGate (normally the server LAN IP,
+not a Docker container IP).
+
+Select **ตัดการเชื่อมต่อ** beside a Dashboard online session, or use the existing
+Activity Monitor Kick control. For FortiGate captive portal the server sends
+`User-Name` and `Framed-IP-Address`, plus Event-Timestamp and Message-Authenticator.
+An authenticated Disconnect-ACK is required before reporting acknowledgment;
+NAK, invalid responses, and timeout are reported as failures. The accounting row
+stays open until FortiGate sends Accounting Stop. The command does not disable the
+account, blacklist the client IP, or delete session history, so the client can
+open the portal again and log in with the same IP. Real-device verification should
+check ACK, Accounting Stop, then a new Accounting Start after re-login.
+
+References: [Fortinet CoA configuration](https://community.fortinet.com/fortigate-3/technical-tip-how-to-configure-coa-change-of-authorization-support-on-the-fortigate-181038)
+and [captive portal session attributes](https://community.fortinet.com/fortigate-3/technical-tip-radius-coa-behavior-100060).

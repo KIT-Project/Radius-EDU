@@ -36,7 +36,7 @@ class KickerComponent extends Component {
     protected	$node_action_add = 'http://127.0.0.1/cake4/rd_cake/node-actions/add.json';
     protected	$ap_action_add = 'http://127.0.0.1/cake4/rd_cake/ap-actions/add.json';
     
-   	protected $components = ['MikrotikApi','MikrotikRestApi'];
+    protected $components = ['MikrotikApi','MikrotikRestApi','FortiGateDisconnect'];
     
     public function initialize(array $config):void{
 
@@ -57,15 +57,20 @@ class KickerComponent extends Component {
         //---Location of radclient----
         $nasidentifier  = $ent->nasidentifier;
         $radacctid      = $ent->radacctid;
+        $cloudId = $this->getController()->getRequest()->getQuery('cloud_id');
 	    $nasipaddress   = $ent->nasipaddress;
                 
      	//First we try to locate the client under dynamic_clients
      	$dc = $this->DynamicClients->find()
      		->where(['DynamicClients.nasidentifier' => $nasidentifier])
+            ->where($cloudId ? ['DynamicClients.cloud_id'=>$cloudId] : [])
      		->contain(['DynamicClientSettings'])
      		->first();
      		
      	if($dc){   	    
+            if ($dc->type === 'FortiGate-COA') {
+                return $this->FortiGateDisconnect->disconnect($dc, $ent);
+            }
      	   	    
      	    if($dc->type == $this->typeAccel){ //It is type AccelRadiusdesk -> try to locate the session and set the disconnect flag of the session
      	        $this->kickAccelSession($ent);
@@ -131,10 +136,14 @@ class KickerComponent extends Component {
      	if($nasWhere){
          	$nas = $this->Nas->find()
          		->where($nasWhere)
+                ->where($cloudId ? ['Nas.cloud_id'=>$cloudId] : [])
          		->contain(['NaSettings'])
          		->first();
          		
 		    if($nas){
+                if ($nas->type === 'FortiGate-COA') {
+                    return $this->FortiGateDisconnect->disconnect($nas, $ent);
+                }
            
                 if(
                     ($nas->type == $this->typeJuniper)||
@@ -180,6 +189,11 @@ class KickerComponent extends Component {
                
         //--- END NAS TABLE ---
              
+        $supported = ['AccelRadiusdesk','CoovaMeshdesk','private_psk','Juniper','Mikrotik-COA','Cisco-COA','Mikrotik-API','Mikrotik-Rest-API'];
+        if ((!$dc || !in_array($dc->type, $supported, true)) &&
+            (!isset($nas) || !$nas || !in_array($nas->type, $supported, true))) {
+            return ['title'=>'Disconnect unavailable','message'=>'NAS ไม่รองรับการตัด session หากเป็น FortiGate ให้เลือกชนิด FortiGate-COA','type'=>'error','acknowledged'=>false];
+        }
         return $data = [];       
     }
     
