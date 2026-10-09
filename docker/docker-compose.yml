@@ -12,7 +12,7 @@ services:
         condition: service_healthy
 
     ports:
-      - "80:80"
+      - "${ADMIN_HTTP_PORT:-8000}:80"
       - "${PORTAL_HTTP_PORT:-5500}:550"
       - "1812:1812/udp"
       - "1813:1813/udp"

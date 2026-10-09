@@ -11,7 +11,7 @@ bash docker/local_build.sh
 
 The script builds `radiusdesk-edu:1.0.0`, starts MariaDB, waits for readiness,
 initializes the database and applies bundled SQL patches before starting the app.
-Open http://localhost (TCP 80); RADIUS uses UDP 1812 and 1813.
+Open http://localhost:8000 (TCP 8000); RADIUS uses UDP 1812 and 1813.
 
 `docker/.env` defines the local staging directory (`./data`, relative to docker/)
 and Compose bridge network. MariaDB data is persisted in the `rd_data` volume;
@@ -34,7 +34,7 @@ The docker_hub Compose file runs an upstream prebuilt image, not EDU 1.0.0.
 ## Captive portal URL for FortiGate
 
 The dedicated portal mapping is `${PORTAL_HTTP_PORT:-5500}:550` (host:container).
-Configure `PORTAL_HTTP_PORT=5500` in `docker/.env`. Admin stays on host port 80;
+Configure `PORTAL_HTTP_PORT=5500` in `docker/.env`. Admin uses `${ADMIN_HTTP_PORT:-8000}:80` on host port 8000;
 port 5500 serves only `/login/bootstrap5/` and its static assets.
 
 Set FortiGate external portal URL to `http://<SERVER_LAN_IP>:5500/login/bootstrap5/`.
