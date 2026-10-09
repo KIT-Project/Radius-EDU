@@ -18,16 +18,61 @@
     if (window.BroadcastChannel) {
         try { channel = new window.BroadcastChannel('school-wifi-login'); } catch (_) {}
     }
+    let probeTimer = null;
+    let wasBlocked = false;
+    let baselineDone = false;
+    let probeBusy = false;
+    function finishLogin() {
+        pending = false;
+        if (probeTimer !== null) window.clearInterval(probeTimer);
+        document.getElementById('password').value = '';
+        form.hidden = true;
+        status.textContent = 'เข้าสู่ระบบสำเร็จ กำลังเปิด Google…';
+        window.location.replace('https://www.google.com/');
+    }
+    // Some gateway retry flows open their continuation in a different tab, or
+    // ignore CONTINUE_URL. Recover the waiting tab only after internet access
+    // changes from blocked before submission to reachable after submission.
+    async function googleReachable() {
+        const controller = new window.AbortController();
+        const timeout = window.setTimeout(function () { controller.abort(); }, 4000);
+        try {
+            await window.fetch('https://www.google.com/generate_204?portal_probe=' + Date.now(), {
+                mode: 'no-cors', credentials: 'omit', cache: 'no-store',
+                redirect: 'error', referrerPolicy: 'no-referrer', signal: controller.signal
+            });
+            return true;
+        } catch (_) { return false; }
+        finally { window.clearTimeout(timeout); }
+    }
+    const canProbe = !!(window.fetch && window.AbortController);
+    if (canProbe && params.get('magic') && params.get('post')) {
+        googleReachable().then(function (reachable) {
+            // A slow pre-login probe resolving after submission cannot establish
+            // a trustworthy baseline; leave the normal continuation in charge.
+            if (!pending) { wasBlocked = !reachable; baselineDone = true; }
+        });
+    }
+    function watchWaitingTab() {
+        if (!canProbe || probeTimer !== null) return;
+        let checks = 0;
+        probeTimer = window.setInterval(async function () {
+            if (!pending || ++checks > 30) {
+                window.clearInterval(probeTimer); probeTimer = null; return;
+            }
+            if (!baselineDone || !wasBlocked || probeBusy) return;
+            probeBusy = true;
+            const reachable = await googleReachable();
+            probeBusy = false;
+            if (pending && reachable) finishLogin();
+        }, 2000);
+    }
     if (channel) {
         channel.onmessage = function (event) {
             // A reply from an earlier login (even at the same IP) must not finish this one.
             if (!pending || !event.data || event.data.type !== 'login-complete' ||
                 event.data.attempt !== attempt) return;
-            pending = false;
-            document.getElementById('password').value = '';
-            form.hidden = true;
-            status.textContent = 'เข้าสู่ระบบสำเร็จ กำลังเปิด Google…';
-            window.location.replace('https://www.google.com/');
+            finishLogin();
         };
     }
     document.getElementById('schoolName').textContent = config.schoolName || 'WIFI';
@@ -103,6 +148,7 @@
         form.target = '_top';
         button.formTarget = '_top';
         pending = true;
+        watchWaitingTab();
         button.disabled = true;
         status.hidden = false;
         status.classList.remove('error');
@@ -112,6 +158,7 @@
     window.addEventListener('pageshow', function (event) {
         if (!event.persisted) return;
         pending = false;
+        if (probeTimer !== null) { window.clearInterval(probeTimer); probeTimer = null; }
         button.disabled = false;
         document.getElementById('password').value = '';
         if (ready && !failed) status.textContent = 'พร้อมเข้าสู่ระบบ Wi-Fi ของโรงเรียน';

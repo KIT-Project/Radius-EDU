@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../js/schoolPortal.js'), 'utf8');
 
-function page(query, config = {}) {
+function page(query, config = {}, browser = {}) {
     const elements = {};
     for (const id of ['loginForm', 'submitButton', 'status', 'retryLogin', 'schoolName', 'magic', 'password']) {
         const classes = new Set();
@@ -27,6 +27,7 @@ function page(query, config = {}) {
         location: { search: query, href: 'https://portal.school/login/' + query, replace: url => redirects.push(url) }, listeners: {},
         addEventListener(name, callback) { this.listeners[name] = callback; }
     };
+    Object.assign(window, browser);
     vm.runInNewContext(source, {
         window, URL, URLSearchParams,
         document: { getElementById: id => elements[id], createElement: () => ({}) }
@@ -137,4 +138,58 @@ test('fresh login retry targets Google in the current top-level tab', () => {
     assert.match(retryLink, /href="http:\/\/www\.google\.com\/"/);
     assert.match(retryLink, /target="_top"/);
     assert.doesNotMatch(retryLink, /neverssl/);
+});
+
+
+function networkPage(query, initiallyOnline = false) {
+    let online = initiallyOnline;
+    let tick;
+    const calls = [];
+    const fixture = page(query, {}, {
+        AbortController,
+        setTimeout: () => 1, clearTimeout() {},
+        setInterval: callback => { tick = callback; return 2; },
+        clearInterval() {},
+        fetch: async (url, options) => {
+            calls.push({url, options});
+            if (!online) throw new Error('Blocked by captive portal');
+            return {type: 'opaque'};
+        }
+    });
+    return {...fixture, calls, setOnline(value) {online = value;}, tick: () => tick()};
+}
+const flushPromises = () => new Promise(resolve => setImmediate(resolve));
+
+test('retry login redirects the waiting tab only after blocked internet becomes available', async () => {
+    const fixture = networkPage(challenge + '&Auth=Failed');
+    await flushPromises();
+    fixture.elements.loginForm.listeners.submit({preventDefault() {}});
+    await fixture.tick();
+    assert.equal(fixture.redirects.length, 0, 'wrong credentials must not redirect');
+    fixture.setOnline(true);
+    await fixture.tick();
+    assert.deepEqual(fixture.redirects, ['https://www.google.com/']);
+    assert.equal(fixture.elements.loginForm.hidden, true);
+    assert.equal(fixture.elements.password.value, '');
+    assert.equal(fixture.calls[0].options.redirect, 'error');
+    assert.equal(fixture.calls[0].options.credentials, 'omit');
+    assert.equal(fixture.calls[0].options.referrerPolicy, 'no-referrer');
+});
+
+test('already reachable Google is not treated as proof of a new login', async () => {
+    const fixture = networkPage(challenge, true);
+    await flushPromises();
+    fixture.elements.loginForm.listeners.submit({preventDefault() {}});
+    await fixture.tick();
+    assert.equal(fixture.redirects.length, 0);
+});
+
+test('browser back cancels the waiting-tab redirect', async () => {
+    const fixture = networkPage(challenge);
+    await flushPromises();
+    fixture.elements.loginForm.listeners.submit({preventDefault() {}});
+    fixture.window.listeners.pageshow({persisted: true});
+    fixture.setOnline(true);
+    await fixture.tick();
+    assert.equal(fixture.redirects.length, 0);
 });
