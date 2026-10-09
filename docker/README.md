@@ -122,8 +122,8 @@ Accounting on UDP 1813 must remain enabled. The source IP of disconnect packets
 must match the RADIUS server configured on FortiGate (normally the server LAN IP,
 not a Docker container IP).
 
-Select **ตัดการเชื่อมต่อ** beside a Dashboard online session, or use the existing
-Activity Monitor Kick control. For FortiGate captive portal the server sends
+Use the existing **Activity Monitor → Accounting data → Kick/Disconnect** control.
+The Dashboard is for monitoring only. For FortiGate captive portal the server sends
 `User-Name` and `Framed-IP-Address`, plus Event-Timestamp and Message-Authenticator.
 An authenticated Disconnect-ACK is required before reporting acknowledgment;
 NAK, invalid responses, and timeout are reported as failures. The accounting row
