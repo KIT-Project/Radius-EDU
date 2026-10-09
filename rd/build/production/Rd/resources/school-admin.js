@@ -143,7 +143,7 @@
                 var separator = component.nextSibling();
                 if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
             });
-            Ext.ComponentQuery.query('pnlDashboard toolbar tbseparator').forEach(function (separator) {
+            Ext.ComponentQuery.query('pnlDashboard > toolbar > tbseparator').forEach(function (separator) {
                 if (!separator.hidden) separator.hide();
             });
             Ext.ComponentQuery.query('pnlLogin').forEach(function (panel) {
