@@ -11,7 +11,7 @@ bash docker/local_build.sh
 
 The script builds `radiusdesk-edu:1.0.0`, starts MariaDB, waits for readiness,
 initializes the database and applies bundled SQL patches before starting the app.
-Open http://localhost:8000 (TCP 8000); RADIUS uses UDP 1812 and 1813.
+Open https://localhost:8000 (TCP 8000); RADIUS uses UDP 1812 and 1813.
 
 `docker/.env` defines the local staging directory (`./data`, relative to docker/)
 and Compose bridge network. MariaDB data is persisted in the `rd_data` volume;
@@ -34,13 +34,13 @@ The docker_hub Compose file runs an upstream prebuilt image, not EDU 1.0.0.
 ## Captive portal URL for FortiGate
 
 The dedicated portal mapping is `${PORTAL_HTTP_PORT:-5500}:550` (host:container).
-Configure `PORTAL_HTTP_PORT=5500` in `docker/.env`. Admin uses `${ADMIN_HTTP_PORT:-8000}:80` on host port 8000;
+Configure `PORTAL_HTTP_PORT=5500` in `docker/.env`. Admin uses `${ADMIN_HTTP_PORT:-8000}:443` on host port 8000;
 port 5500 serves only `/login/bootstrap5/` and its static assets.
 
-Set FortiGate external portal URL to `http://<SERVER_LAN_IP>:5500/login/bootstrap5/`.
+Set FortiGate external portal URL to `https://<SERVER_LAN_IP>:5500/login/bootstrap5/`.
 Use the server IP reachable from the Wi-Fi client VLAN, not `localhost` or a container IP.
 Allow unauthenticated clients to reach this IP and TCP port in FortiGate's portal access rules.
-This listener is HTTP; HTTPS requires a separate certificate/listener configuration.
+Both web listeners use HTTPS. Host port variables retain their existing names for compatibility.
 
 FortiGate appends `post` and `magic` to the redirect URL. The existing frontend retains
 `magic` and POSTs `magic`, `username`, and `password` to the trusted FortiGate `/fgtauth`
@@ -49,6 +49,29 @@ and rebuild the image. Do not set this origin to the RADIUSdesk server's portal 
 FortiGate creates the authenticated session and reports it to RADIUS via UDP 1813;
 the portal path itself is not a session creation or disconnect API.
 
-Verify locally: `http://localhost:5500/login/bootstrap5/`.
+Verify locally: `https://localhost:5500/login/bootstrap5/`.
 Changing the port mapping alone requires `docker compose up -d`; changing the baked
 Nginx config or frontend assets requires `docker compose build radiusdesk` first.
+
+## HTTPS certificates
+
+Before the first build, set `TLS_SERVER_IP` and/or `TLS_SERVER_DNS` in `docker/.env`
+to the address clients will use. For example, `TLS_SERVER_IP=192.168.230.90`.
+`local_build.sh` creates a self-signed test certificate only when both files are absent.
+It preserves any existing certificate and private key.
+
+Provide an organization certificate in these files before building, or replace the
+existing pair afterwards:
+
+- `docker/data/tls/server.crt`: PEM certificate with intermediate chain, leaf first.
+- `docker/data/tls/server.key`: matching unencrypted PEM private key, readable by container root.
+
+Keep the key private (`chmod 600`); never add it to Git. The staging directory is
+excluded from Git and Docker build context; certificates are mounted read-only.
+The certificate must cover the IP or DNS name used in the URL. For a self-signed
+certificate, distribute only `server.crt` to client devices and configure trust there.
+A trusted organization certificate avoids browser trust warnings when its issuer
+and address are valid. Captive portal browsers may refuse untrusted certificates.
+After replacing a certificate, restart the app with `docker compose restart radiusdesk`
+from `docker/`. After pulling this HTTPS change on an existing VM, run
+`bash docker/local_build.sh` to generate/mount certificates and rebuild Nginx config.

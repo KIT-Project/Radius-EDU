@@ -11,6 +11,7 @@ cp db_priveleges.sql startup.sh "$RADIUSDESK_VOLUME/db_startup/"
 cp my_custom.cnf "$RADIUSDESK_VOLUME/db_conf/"
 docker compose config --quiet
 docker compose build radiusdesk
+bash ./init_tls.sh
 docker compose up -d --wait --wait-timeout 300 rdmariadb
 docker compose exec -T rdmariadb bash /opt/radiusdesk-init/startup.sh
 docker compose up -d radiusdesk

@@ -12,10 +12,13 @@ services:
         condition: service_healthy
 
     ports:
-      - "${ADMIN_HTTP_PORT:-8000}:80"
+      - "${ADMIN_HTTP_PORT:-8000}:443"
       - "${PORTAL_HTTP_PORT:-5500}:550"
       - "1812:1812/udp"
       - "1813:1813/udp"
+
+    volumes:
+      - ${RADIUSDESK_VOLUME}/tls:/etc/nginx/tls:ro
 
   rdmariadb:
     container_name: radiusdesk-mariadb

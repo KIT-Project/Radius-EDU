@@ -14,7 +14,7 @@ FROM ubuntu:24.04
 	COPY ./docker/default /etc/nginx/sites-enabled/
 	
 	RUN apt-get -y install php-fpm
-	RUN apt-get -y install php-cli php-mysql php-gd php-curl php-xml php-mbstring php-intl php-sqlite3 git wget 
+	RUN apt-get -y install php-cli php-mysql php-gd php-curl php-xml php-mbstring php-intl php-sqlite3 git wget openssl
 	
 	#Also install ping vim and mariadb-client
 	RUN apt-get -y install vim mariadb-client iputils-ping
@@ -121,7 +121,7 @@ FROM ubuntu:24.04
     ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
     # Expose RADIUSdesk front end ports
-    EXPOSE 80/tcp
+    EXPOSE 443/tcp
     EXPOSE 550/tcp
     EXPOSE 1812/udp
     EXPOSE 1813/udp
