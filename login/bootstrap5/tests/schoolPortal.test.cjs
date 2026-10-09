@@ -129,3 +129,12 @@ test('success continuation broadcasts its attempt and replaces itself with Googl
         if (messages.length) assert.equal(messages[0].attempt, 'a'.repeat(32));
     }
 });
+
+
+test('fresh login retry targets Google in the current top-level tab', () => {
+    const html = fs.readFileSync(require('node:path').join(__dirname, '../index.html'), 'utf8');
+    const retryLink = html.match(/<a\s+id="retryLogin"[^>]*>/)[0];
+    assert.match(retryLink, /href="http:\/\/www\.google\.com\/"/);
+    assert.match(retryLink, /target="_top"/);
+    assert.doesNotMatch(retryLink, /neverssl/);
+});

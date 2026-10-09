@@ -84,7 +84,8 @@
         status.textContent = 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบชื่อผู้ใช้และรหัสผ่าน หากข้อมูลถูกต้อง โปรดติดต่อผู้ดูแลระบบเพื่อตรวจสอบสิทธิ์การใช้งาน';
         document.getElementById('password').value = '';
         // FortiGate can return Auth=Failed without a new transaction token.
-        // Ask the network for a fresh challenge instead of posting incomplete credentials.
+        // Request a fresh challenge via HTTP Google. If the gateway uses the original
+        // destination instead of CONTINUE_URL after a retry, it still lands on Google.
         if (!ready) {
             form.hidden = true;
             retry.hidden = false;
