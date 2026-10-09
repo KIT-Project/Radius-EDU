@@ -73,6 +73,73 @@
         return Array.from(users.values()).filter(function (user) { return user.total > 0; })
             .sort(function (a,b) { return b.total-a.total || a.username.localeCompare(b.username); });
     }
+    function combineUsage(responses) {
+        var first = responses[0].data;
+        var result = {query_info:Object.assign({},first.query_info),summary:Object.assign({},first.summary),graph:{items:[]},top:[]};
+        var slots = new Map(), users = new Map();
+        result.summary.realm = 'ALL REALMS';
+        ['data_in','data_out','data_total','online'].forEach(function (key) { result.summary[key] = 0; });
+        responses.forEach(function (response) {
+            var data = response.data;
+            ['data_in','data_out','data_total','online'].forEach(function (key) { result.summary[key] += Number(data.summary[key]) || 0; });
+            (data.graph.items || []).forEach(function (row) {
+                var slot = slots.get(row.id) || Object.assign({},row,{data_in:0,data_out:0,data_total:0});
+                ['data_in','data_out','data_total'].forEach(function (key) { slot[key] += Number(row[key]) || 0; });
+                slots.set(row.id,slot);
+            });
+            (data.top || []).forEach(function (row) {
+                var user = users.get(row.username) || Object.assign({},row,{data_in:0,data_out:0,data_total:0});
+                ['data_in','data_out','data_total'].forEach(function (key) { user[key] += Number(row[key]) || 0; });
+                users.set(row.username,user);
+            });
+        });
+        result.graph.items = Array.from(slots.values()).sort(function (a,b) { return a.id-b.id; });
+        result.top = Array.from(users.values()).sort(function (a,b) { return b.data_total-a.data_total; }).slice(0,20);
+        return {success:true,data:result};
+    }
+    function requestUsage(params) {
+        var endpoint = 'data-usages-new/usage-for-realm-new';
+        if (params.type !== 'realm' || Number(params.username) > 0) return request(endpoint,params);
+        // The legacy ALL REALMS response references an unset realm name.
+        // Use its supported individual-realm responses without changing the backend.
+        return request('realms/index-cloud',{cloud_id:params.cloud_id,all_option:false}).then(function (data) {
+            var realms = (data.items || []).filter(function (realm) { return Number(realm.id) > 0; });
+            if (!realms.length) throw new Error('No accessible realms');
+            return Promise.all(realms.map(function (realm) {
+                return request(endpoint,Object.assign({},params,{username:realm.id,realm_id:realm.id}));
+            }));
+        }).then(combineUsage);
+    }
+    function refreshDataUsage() {
+        if (document.hidden || !window.schoolUi.enabled) return;
+        Ext.ComponentQuery.query('pnlDataUsage').forEach(function (panel) {
+            var controller = panel.getController();
+            if (!controller || controller.schoolUsageBound) return;
+            controller.schoolUsageBound = true;
+            controller.fetchStats = function () {
+                if (panel.destroyed || panel.schoolUsageLoading) return;
+                var realm = panel.down('#duCmbRealm'), date = panel.down('#dtDate'), timezone = panel.down('cmbTimezones');
+                var realmId = realm.getValue();
+                if (this.getUsageType() === 'realm') this.setUsername(realmId || 0);
+                var params = {cloud_id:Ext.getApplication().getCloudId(),span:this.getSpan(),day:date.getRawValue(),
+                    timezone_id:timezone.getValue(),realm_id:realmId,type:this.getUsageType(),username:this.getUsername()};
+                var me = this;
+                panel.schoolUsageLoading = true;
+                requestUsage(params).then(function (data) {
+                    if (!panel.destroyed) me.paintScreen(data.data);
+                }).catch(function () {
+                    if (!panel.destroyed) panel.setLoading('ไม่สามารถโหลดข้อมูลได้ กรุณากดรีเฟรช');
+                }).then(function () {
+                    panel.schoolUsageLoading = false;
+                    panel.schoolUsageUpdated = Date.now();
+                    if (!panel.destroyed) panel.setLoading(false);
+                });
+            };
+        });
+        Ext.ComponentQuery.query('pnlDataUsage').forEach(function (panel) {
+            if (panel.isVisible(true) && Date.now()-(panel.schoolUsageUpdated || 0) >= 5000) panel.getController().fetchStats();
+        });
+    }
     function requestTraffic(cloud) {
         var rows = [];
         function page(offset) {
@@ -85,7 +152,7 @@
         }
         return Promise.all([
             page(0).catch(function () { return null; }),
-            request('data-usages-new/usage-for-realm-new', {cloud_id:cloud,type:'realm',username:0,span:'day'})
+            requestUsage({cloud_id:cloud,type:'realm',username:0,span:'day'})
                 .catch(function () { return null; })
         ]).then(function (data) {
             // Data Usage already aggregates received accounting counters in UserStats.
@@ -204,6 +271,7 @@
                 if (logo.alt !== 'โลโก้โรงเรียน') logo.alt = 'โลโก้โรงเรียน';
             });
         }
+        refreshDataUsage();
         refreshDashboards(false);
     }
     function refreshDashboards(force) {
@@ -260,7 +328,7 @@
             clearTimeout(refreshTimer);
             refreshTimer = setTimeout(function () { refreshDashboards(true); }, 300);
         });
-        setInterval(function () { tickSessions(); refreshDashboards(false); }, 1000);
+        setInterval(function () { tickSessions(); refreshDashboards(false); refreshDataUsage(); }, 1000);
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden) { tickSessions(); refreshDashboards(true); }
         });
