@@ -105,8 +105,13 @@ the POST body, and redirect fields cannot overwrite username/password.
 
 ## Captive login destination and failed-login page
 
-The school portal sends a fixed `CONTINUE_URL=https://www.google.com/` with the
-native `/fgtauth` POST (query string and form field). FortiGate still validates
+The school portal sends its own `/login/success.html#<random-attempt>` destination
+as `CONTINUE_URL` with the native `/fgtauth` POST (query string and form field).
+The form explicitly targets the current top-level tab. The continuation replaces
+itself with Google and uses a same-origin BroadcastChannel to notify a login tab
+still awaiting the matching attempt. It never finishes a different or earlier login
+just because the client IP is the same. No credentials are included in this signal.
+FortiGate still validates
 credentials before redirecting; the portal does not navigate on submit or assume
 that an HTTP 200 response means authentication succeeded. Fortinet documents
 `CONTINUE_URL` as overriding the interface's redirect destination:

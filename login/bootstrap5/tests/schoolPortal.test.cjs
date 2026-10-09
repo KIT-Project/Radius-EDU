@@ -16,27 +16,37 @@ function page(query, config = {}) {
             addEventListener(name, callback) { this.listeners[name] = callback; }
         };
     }
+    const channels = [];
+    const redirects = [];
     const window = {
-        schoolPortalConfig: config, location: { search: query }, listeners: {},
+        crypto: require('node:crypto').webcrypto,
+        BroadcastChannel: class {
+            constructor(name) { this.name = name; channels.push(this); }
+        },
+        schoolPortalConfig: config,
+        location: { search: query, href: 'https://portal.school/login/' + query, replace: url => redirects.push(url) }, listeners: {},
         addEventListener(name, callback) { this.listeners[name] = callback; }
     };
     vm.runInNewContext(source, {
         window, URL, URLSearchParams,
         document: { getElementById: id => elements[id], createElement: () => ({}) }
     });
-    return { elements, window };
+    return { elements, window, channels, redirects };
 }
 const challenge = '?magic=transaction123&post=' + encodeURIComponent('https://10.10.10.1:1003/fgtauth');
 
-test('native login POST supplies Google in URL and body, ignoring query redirect overrides', () => {
-    const { elements, window } = page(challenge + '&CONTINUE_URL=https://evil.example/&username=evil&password=evil&userip=192.168.23.59');
+test('native login POST supplies our continuation, ignoring query redirect overrides', () => {
+    const { elements, window, redirects } = page(challenge + '&CONTINUE_URL=https://evil.example/&username=evil&password=evil&userip=192.168.23.59');
     const target = new URL(elements.loginForm.action);
     assert.equal(target.origin, 'https://10.10.10.1:1003');
     assert.equal(target.pathname, '/fgtauth');
     assert.equal(target.searchParams.get('magic'), 'transaction123');
-    assert.equal(target.searchParams.get('CONTINUE_URL'), 'https://www.google.com/');
+    const continuation = new URL(target.searchParams.get('CONTINUE_URL'));
+    assert.equal(continuation.origin, 'https://portal.school');
+    assert.equal(continuation.pathname, '/login/success.html');
+    assert.match(continuation.hash, /^#[a-f0-9]{32}$/);
     const fields = Object.fromEntries(elements.loginForm.children.map(field => [field.name, field.value]));
-    assert.equal(fields.CONTINUE_URL, 'https://www.google.com/');
+    assert.equal(fields.CONTINUE_URL, continuation.href);
     assert.equal(fields.userip, '192.168.23.59');
     assert.equal(fields.username, undefined);
     assert.equal(fields.password, undefined);
@@ -44,7 +54,9 @@ test('native login POST supplies Google in URL and body, ignoring query redirect
     elements.loginForm.listeners.submit({ preventDefault() { blocked = true; } });
     assert.equal(blocked, false);
     assert.equal(elements.submitButton.disabled, true);
-    assert.equal(window.location.href, undefined, 'submission must not prematurely navigate to Google');
+    assert.equal(elements.loginForm.target, '_top');
+    assert.equal(elements.submitButton.formTarget, '_top');
+    assert.equal(redirects.length, 0, 'submission must not prematurely navigate to Google');
 });
 
 test('Auth=Failed without a challenge shows an alert and offers a fresh login', () => {
@@ -84,4 +96,36 @@ test('browser back restores the submit button and clears the password', () => {
     window.listeners.pageshow({ persisted: true });
     assert.equal(elements.submitButton.disabled, false);
     assert.equal(elements.password.value, '');
+});
+
+
+test('only completion for the pending login replaces the page and clears credentials', () => {
+    const { elements, channels, redirects } = page(challenge);
+    const continuation = new URL(new URL(elements.loginForm.action).searchParams.get('CONTINUE_URL'));
+    const attempt = continuation.hash.slice(1);
+    channels[0].onmessage({ data: { type: 'login-complete', attempt } });
+    assert.equal(redirects.length, 0, 'must submit first');
+    elements.loginForm.listeners.submit({ preventDefault() {} });
+    elements.password.value = 'sensitive';
+    channels[0].onmessage({ data: { type: 'login-complete', attempt: 'old-login' } });
+    assert.equal(redirects.length, 0, 'ignore a previous session at the same IP');
+    channels[0].onmessage({ data: { type: 'login-complete', attempt } });
+    assert.deepEqual(redirects, ['https://www.google.com/']);
+    assert.equal(elements.password.value, '');
+    assert.equal(elements.loginForm.hidden, true);
+});
+
+test('success continuation broadcasts its attempt and replaces itself with Google', () => {
+    const source = fs.readFileSync(require('node:path').join(__dirname, '../js/schoolSuccess.js'), 'utf8');
+    for (const hash of ['#' + 'a'.repeat(32), '#bad']) {
+        const messages = [];
+        const redirects = [];
+        vm.runInNewContext(source, { window: {
+            location: { hash, replace: url => redirects.push(url) },
+            BroadcastChannel: class { postMessage(message) { messages.push(message); } }
+        } });
+        assert.deepEqual(redirects, ['https://www.google.com/']);
+        assert.equal(messages.length, hash === '#bad' ? 0 : 1);
+        if (messages.length) assert.equal(messages[0].attempt, 'a'.repeat(32));
+    }
 });

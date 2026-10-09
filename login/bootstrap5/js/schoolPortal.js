@@ -8,7 +8,28 @@
     const retry = document.getElementById('retryLogin');
     const params = new URLSearchParams(window.location.search);
     const failed = (params.get('Auth') || '').toLowerCase() === 'failed';
-    const continueUrl = 'https://www.google.com/';
+    const attempt = Array.from(window.crypto.getRandomValues(new Uint8Array(16)),
+        byte => byte.toString(16).padStart(2, '0')).join('');
+    const completion = new URL('success.html', window.location.href);
+    completion.hash = attempt;
+    const continueUrl = completion.href;
+    let pending = false;
+    let channel = null;
+    if (window.BroadcastChannel) {
+        try { channel = new window.BroadcastChannel('school-wifi-login'); } catch (_) {}
+    }
+    if (channel) {
+        channel.onmessage = function (event) {
+            // A reply from an earlier login (even at the same IP) must not finish this one.
+            if (!pending || !event.data || event.data.type !== 'login-complete' ||
+                event.data.attempt !== attempt) return;
+            pending = false;
+            document.getElementById('password').value = '';
+            form.hidden = true;
+            status.textContent = 'เข้าสู่ระบบสำเร็จ กำลังเปิด Google…';
+            window.location.replace('https://www.google.com/');
+        };
+    }
     document.getElementById('schoolName').textContent = config.schoolName || 'WIFI';
     document.title = config.schoolName || 'WIFI';
     let ready = false;
@@ -77,6 +98,10 @@
             status.textContent = 'ไม่พบข้อมูลเข้าสู่ระบบที่ถูกต้องจาก FortiGate กรุณาเปิดผ่านเครือข่าย Wi-Fi อีกครั้ง';
             return;
         }
+        // Navigate this browser tab, including when the portal is embedded in a frame.
+        form.target = '_top';
+        button.formTarget = '_top';
+        pending = true;
         button.disabled = true;
         status.hidden = false;
         status.classList.remove('error');
@@ -85,6 +110,7 @@
     });
     window.addEventListener('pageshow', function (event) {
         if (!event.persisted) return;
+        pending = false;
         button.disabled = false;
         document.getElementById('password').value = '';
         if (ready && !failed) status.textContent = 'พร้อมเข้าสู่ระบบ Wi-Fi ของโรงเรียน';
