@@ -69,9 +69,6 @@ class PermanentUsersTable extends Table{
                     'provider' => 'table'
                 ]
             ])
-            ->allowEmptyString('description')
-            ->scalar('description')
-            ->maxLength('description', 255, 'Description must be at most 255 characters')
             ->allowEmptyString('static_ip')
             ->add('static_ip', [
                 'nameUnique' => [

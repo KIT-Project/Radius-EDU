@@ -270,23 +270,6 @@
     }
     function populate() {
         if (window.schoolUi.enabled) {
-            Ext.ComponentQuery.query('winPermanentUserAdd, pnlPermanentUserPersonal').forEach(function (panel) {
-                if (panel.down('[name=description]')) return;
-                var editing = panel.isXType('pnlPermanentUserPersonal');
-                var anchor = panel.down(editing ? '[name=surname]' : '[name=password]');
-                if (!anchor || !anchor.ownerCt) return;
-                var field = anchor.ownerCt.insert(anchor.ownerCt.items.indexOf(anchor) + 1, {
-                    xtype:'textareafield', name:'description', fieldLabel:'Description',
-                    emptyText:'เช่น นักเรียน ม.1/3 หรือ ป.6/2', allowBlank:true,
-                    maxLength:255, enforceMaxLength:true, height:65
-                });
-                var userPanel = editing && panel.up('pnlPermanentUser');
-                if (userPanel && userPanel.pu_id) {
-                    request('permanent-users/view-personal-info',{user_id:userPanel.pu_id}).then(function (result) {
-                        if (!field.destroyed && !field.isDirty()) field.setValue(result.data.description || '');
-                    }).catch(function () {});
-                }
-            });
             Ext.ComponentQuery.query('pnlAddEditProfile').forEach(function (form) {
                 if (form.schoolSessionStyled) return;
                 form.schoolSessionStyled = true;

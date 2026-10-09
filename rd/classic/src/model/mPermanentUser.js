@@ -12,7 +12,7 @@ Ext.define('Rd.model.mPermanentUser', {
          {name: 'profile_id'},
           'perc_time_used',
           'perc_data_used',
-         'name','surname','description', 'phone', 'email', 'address',
+         'name','surname', 'phone', 'email', 'address',
          {name: 'active',       type: 'bool'    },
          {name: 'last_accept_time', type: 'date'},
          {name: 'last_accept_time_in_words',  type: 'string'  },
