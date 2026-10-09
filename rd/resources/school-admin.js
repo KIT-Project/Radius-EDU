@@ -222,6 +222,13 @@
                 var separator = component.nextSibling();
                 if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
             });
+            // Keep timezone components and their configured values for request parameters.
+            Ext.ComponentQuery.query('toolbar cmbTimezones#cmbTimezone').forEach(function (timezone) {
+                if (!timezone.hidden) timezone.hide();
+                [timezone.previousSibling(),timezone.nextSibling()].forEach(function (separator) {
+                    if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
+                });
+            });
             Ext.ComponentQuery.query('pnlDashboard > toolbar > tbseparator').forEach(function (separator) {
                 if (!separator.hidden) separator.hide();
             });
