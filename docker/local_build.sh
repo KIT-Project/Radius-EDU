@@ -12,5 +12,5 @@ cp my_custom.cnf "$RADIUSDESK_VOLUME/db_conf/"
 docker compose config --quiet
 docker compose build radiusdesk
 docker compose up -d --wait --wait-timeout 300 rdmariadb
-docker compose exec -T rdmariadb bash /tmp/startup.sh
+docker compose exec -T rdmariadb bash /opt/radiusdesk-init/startup.sh
 docker compose up -d radiusdesk

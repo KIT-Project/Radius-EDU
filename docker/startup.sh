@@ -18,12 +18,12 @@ if [[ ! -f $FLAG ]]; then
 
    sleep 10
    echo -- CONFIGURE PRIVELEGES
-   mariadb -u root < /tmp/db_priveleges.sql
+   mariadb -u root < /opt/radiusdesk-init/db_priveleges.sql
 
    sleep 2
    echo -- IMPORT RADIUSDESK TABLES
    # Populate database
-   mariadb -u root rd < /tmp/rd.sql
+   mariadb -u root rd < /opt/radiusdesk-init/rd.sql
    #the next line creates an empty file so it won't run the next boot
    touch "$FLAG"
 
@@ -35,7 +35,7 @@ fi
 echo UPDATE PATCHED DATABASE TABLES
 
 #Apply all patches in numerical order, excluding rd.sql and rd.min.sql
-for patch in /tmp/db_patches/*.sql; do
+for patch in /opt/radiusdesk-init/db_patches/*.sql; do
   filename=$(basename "$patch")
 
   #Skip rd.sql and rd.min.sql

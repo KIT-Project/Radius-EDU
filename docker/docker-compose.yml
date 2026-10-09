@@ -37,7 +37,7 @@ services:
     volumes:
       - ${RADIUSDESK_VOLUME}/db_conf/my_custom.cnf:/etc/mysql/conf.d/my_custom.cnf:ro
       - rd_data:/var/lib/mysql
-      - ${RADIUSDESK_VOLUME}/db_startup:/tmp
+      - ${RADIUSDESK_VOLUME}/db_startup:/opt/radiusdesk-init:ro
 
   # Optional phpmyadmin for debugging and db backups
   #phpmyadmin:
