@@ -6,6 +6,8 @@ use Cake\Core\Configure;
 use Cake\Utility\Inflector;
 use Cake\ORM\Query;
 use Cake\Log\Log;
+use Cake\Utility\Security;
+use App\Utility\PortalSessionProof;
 
 use Cake\Core\Configure\Engine\PhpConfig;
 
@@ -35,7 +37,51 @@ class RadacctsController extends AppController {
         $this->loadComponent('Kicker');
         $this->loadComponent('Counters');
         $this->loadComponent('TimeCalculations');
-        $this->Authentication->allowUnauthenticated(['getUsage']); 
+        $this->Authentication->allowUnauthenticated(['getUsage', 'portalSessionStatus']);
+    }
+
+    // Public portal confirmation exposes only a boolean for a new session on
+    // the actual requesting IP. Never trust userip or forwarded headers here.
+    public function portalSessionStatus()
+    {
+        $this->request->allowMethod(['post']);
+        $ip = (string)($this->request->getServerParams()['REMOTE_ADDR'] ?? '');
+        $salt = (string)Security::getSalt();
+        $key = $salt === '' ? '' : hash_hmac('sha256', 'school-portal-session-proof-v1', $salt);
+        $reply = function (array $data, int $code = 200) {
+            return $this->response->withStatus($code)->withType('application/json')
+                ->withHeader('Cache-Control', 'no-store')
+                ->withStringBody(json_encode($data, JSON_THROW_ON_ERROR));
+        };
+        if (!filter_var($ip, FILTER_VALIDATE_IP) || $key === '') {
+            return $reply(['authenticated' => false], 503);
+        }
+        $token = $this->request->getData('token');
+        if ($token !== null) {
+            $proof = is_string($token) ? PortalSessionProof::verify($token, $ip, $key, time()) : null;
+            if (!$proof) return $reply(['authenticated' => false], 400);
+            $active = $this->Radaccts->find()->where([
+                'Radaccts.username' => $proof['username'],
+                'Radaccts.framedipaddress' => $ip,
+                'Radaccts.radacctid >' => $proof['after'],
+                'Radaccts.acctstoptime IS' => null
+            ])->count() > 0;
+            if ($active) {
+                Log::debug('portal-session confirmed ' . json_encode(['username' => $proof['username'], 'ip' => $ip]));
+            }
+            return $reply(['authenticated' => $active]);
+        }
+        $username = $this->request->getData('username');
+        if (!is_string($username) || $username === '' || strlen($username) > 253) {
+            return $reply(['authenticated' => false], 400);
+        }
+        $latest = $this->Radaccts->find()->select(['radacctid'])->where([
+            'Radaccts.username' => $username, 'Radaccts.framedipaddress' => $ip
+        ])->order(['Radaccts.radacctid' => 'DESC'])->first();
+        Log::debug('portal-session started ' . json_encode(['username' => $username, 'ip' => $ip]));
+        return $reply(['token' => PortalSessionProof::issue(
+            $ip, $username, $latest ? (int)$latest->radacctid : 0, $key, time()
+        )]);
     }
 
 	//---- Return the usage for a user/MAC combination

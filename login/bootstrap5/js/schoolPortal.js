@@ -19,9 +19,10 @@
         try { channel = new window.BroadcastChannel('school-wifi-login'); } catch (_) {}
     }
     let probeTimer = null;
-    let wasBlocked = false;
-    let baselineDone = false;
+    let proofToken = null;
     let probeBusy = false;
+    const canConfirm = !!(window.fetch && window.AbortController);
+    const statusUrl = new URL('/cake4/rd_cake/radaccts/portal-session-status.json', window.location.href).href;
     function finishLogin() {
         pending = false;
         if (probeTimer !== null) window.clearInterval(probeTimer);
@@ -30,41 +31,36 @@
         status.textContent = 'เข้าสู่ระบบสำเร็จ กำลังเปิด Google…';
         window.location.replace('https://www.google.com/');
     }
-    // Some gateway retry flows open their continuation in a different tab, or
-    // ignore CONTINUE_URL. Recover the waiting tab only after internet access
-    // changes from blocked before submission to reachable after submission.
-    async function googleReachable() {
+    async function sessionRequest(data) {
         const controller = new window.AbortController();
         const timeout = window.setTimeout(function () { controller.abort(); }, 4000);
         try {
-            await window.fetch('https://www.google.com/generate_204?portal_probe=' + Date.now(), {
-                mode: 'no-cors', credentials: 'omit', cache: 'no-store',
-                redirect: 'error', referrerPolicy: 'no-referrer', signal: controller.signal
+            const response = await window.fetch(statusUrl, {
+                method: 'POST', mode: 'same-origin', credentials: 'omit', cache: 'no-store',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams(data).toString(), signal: controller.signal
             });
-            return true;
-        } catch (_) { return false; }
-        finally { window.clearTimeout(timeout); }
+            if (!response.ok) throw new Error('Session confirmation unavailable');
+            return await response.json();
+        } finally { window.clearTimeout(timeout); }
     }
-    const canProbe = !!(window.fetch && window.AbortController);
-    if (canProbe && params.get('magic') && params.get('post')) {
-        googleReachable().then(function (reachable) {
-            // A slow pre-login probe resolving after submission cannot establish
-            // a trustworthy baseline; leave the normal continuation in charge.
-            if (!pending) { wasBlocked = !reachable; baselineDone = true; }
-        });
-    }
+    // Confirm a NEW Accounting session for this username and the caller's real
+    // IP, rather than guessing from internet connectivity or an older login.
     function watchWaitingTab() {
-        if (!canProbe || probeTimer !== null) return;
+        if (!proofToken || probeTimer !== null) return;
         let checks = 0;
         probeTimer = window.setInterval(async function () {
-            if (!pending || ++checks > 30) {
+            if (!pending || ++checks > 85) {
                 window.clearInterval(probeTimer); probeTimer = null; return;
             }
-            if (!baselineDone || !wasBlocked || probeBusy) return;
+            if (probeBusy) return;
             probeBusy = true;
-            const reachable = await googleReachable();
-            probeBusy = false;
-            if (pending && reachable) finishLogin();
+            try {
+                const result = await sessionRequest({token: proofToken});
+                if (pending && result.authenticated === true) finishLogin();
+            } catch (_) {
+                // The native FortiGate continuation remains available if the API is offline.
+            } finally { probeBusy = false; }
         }, 2000);
     }
     if (channel) {
@@ -148,12 +144,24 @@
         form.target = '_top';
         button.formTarget = '_top';
         pending = true;
-        watchWaitingTab();
         button.disabled = true;
         status.hidden = false;
         status.classList.remove('error');
         status.setAttribute('role', 'status');
         status.textContent = 'กำลังส่งข้อมูลเข้าสู่ระบบไปยัง FortiGate…';
+        if (!canConfirm) return;
+        event.preventDefault();
+        // Capture the accounting watermark BEFORE credentials reach FortiGate.
+        // Never send the password to the portal API.
+        sessionRequest({username: document.getElementById('username').value}).then(function (result) {
+            if (typeof result.token === 'string') proofToken = result.token;
+        }).catch(function () {
+            // Failure to initialize confirmation must not block the native login.
+        }).then(function () {
+            if (!pending) return;
+            watchWaitingTab();
+            form.submit();
+        });
     });
     window.addEventListener('pageshow', function (event) {
         if (!event.persisted) return;

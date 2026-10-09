@@ -6,11 +6,12 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../js/schoo
 
 function page(query, config = {}, browser = {}) {
     const elements = {};
-    for (const id of ['loginForm', 'submitButton', 'status', 'retryLogin', 'schoolName', 'magic', 'password']) {
+    for (const id of ['loginForm', 'submitButton', 'status', 'retryLogin', 'schoolName', 'magic', 'password', 'username']) {
         const classes = new Set();
         elements[id] = {
             hidden: id === 'retryLogin', value: '', children: [], listeners: {}, attrs: {},
             classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
+            submit() { this.submitted = true; },
             appendChild(child) { this.children.push(child); },
             setAttribute(name, value) { this.attrs[name] = value; },
             addEventListener(name, callback) { this.listeners[name] = callback; }
@@ -141,8 +142,9 @@ test('fresh login retry targets Google in the current top-level tab', () => {
 });
 
 
-function networkPage(query, initiallyOnline = false) {
-    let online = initiallyOnline;
+
+function sessionPage(query, initializeFails = false) {
+    let authenticated = false;
     let tick;
     const calls = [];
     const fixture = page(query, {}, {
@@ -152,44 +154,52 @@ function networkPage(query, initiallyOnline = false) {
         clearInterval() {},
         fetch: async (url, options) => {
             calls.push({url, options});
-            if (!online) throw new Error('Blocked by captive portal');
-            return {type: 'opaque'};
+            if (initializeFails) throw new Error('API unavailable');
+            const fields = new URLSearchParams(options.body);
+            return {ok: true, json: async () => fields.has('username') ?
+                {token: 'signed-fixture-proof'} : {authenticated}};
         }
     });
-    return {...fixture, calls, setOnline(value) {online = value;}, tick: () => tick()};
+    fixture.elements.username.value = 'Teacher';
+    return {...fixture, calls, confirm() {authenticated = true;}, tick: () => tick()};
 }
 const flushPromises = () => new Promise(resolve => setImmediate(resolve));
 
-test('retry login redirects the waiting tab only after blocked internet becomes available', async () => {
-    const fixture = networkPage(challenge + '&Auth=Failed');
+test('retry captures accounting baseline before native POST and waits for confirmed session', async () => {
+    const fixture = sessionPage(challenge + '&Auth=Failed');
+    fixture.elements.password.value = 'never-send-to-portal';
+    let prevented = false;
+    fixture.elements.loginForm.listeners.submit({preventDefault() {prevented = true;}});
+    assert.equal(prevented, true);
+    assert.equal(fixture.elements.loginForm.submitted, undefined, 'must capture baseline before gateway POST');
     await flushPromises();
-    fixture.elements.loginForm.listeners.submit({preventDefault() {}});
+    assert.equal(fixture.elements.loginForm.submitted, true);
+    assert.equal(fixture.calls[0].url, 'https://portal.school/cake4/rd_cake/radaccts/portal-session-status.json');
+    assert.equal(fixture.calls[0].options.body, 'username=Teacher');
     await fixture.tick();
-    assert.equal(fixture.redirects.length, 0, 'wrong credentials must not redirect');
-    fixture.setOnline(true);
+    assert.equal(fixture.redirects.length, 0, 'no new session means no redirect');
+    assert.equal(fixture.calls[1].options.body, 'token=signed-fixture-proof');
+    fixture.confirm();
     await fixture.tick();
     assert.deepEqual(fixture.redirects, ['https://www.google.com/']);
     assert.equal(fixture.elements.loginForm.hidden, true);
     assert.equal(fixture.elements.password.value, '');
-    assert.equal(fixture.calls[0].options.redirect, 'error');
-    assert.equal(fixture.calls[0].options.credentials, 'omit');
-    assert.equal(fixture.calls[0].options.referrerPolicy, 'no-referrer');
 });
 
-test('already reachable Google is not treated as proof of a new login', async () => {
-    const fixture = networkPage(challenge, true);
-    await flushPromises();
+test('confirmation API failure still allows native FortiGate login', async () => {
+    const fixture = sessionPage(challenge, true);
     fixture.elements.loginForm.listeners.submit({preventDefault() {}});
-    await fixture.tick();
+    await flushPromises();
+    assert.equal(fixture.elements.loginForm.submitted, true);
     assert.equal(fixture.redirects.length, 0);
 });
 
-test('browser back cancels the waiting-tab redirect', async () => {
-    const fixture = networkPage(challenge);
-    await flushPromises();
+test('browser back cancels a pending confirmation redirect', async () => {
+    const fixture = sessionPage(challenge);
     fixture.elements.loginForm.listeners.submit({preventDefault() {}});
+    await flushPromises();
     fixture.window.listeners.pageshow({persisted: true});
-    fixture.setOnline(true);
+    fixture.confirm();
     await fixture.tick();
     assert.equal(fixture.redirects.length, 0);
 });

@@ -241,3 +241,26 @@ then use the matching firewall group in the QoS policy. This overrides legacy
 Profile group replies when the user's Realm is available. Existing sessions
 require a new login to receive the updated attribute. Verify it in the
 `Access-Accept` packet, alongside `Session-Timeout`.
+
+### Captive login retry confirmation
+
+The login page captures a signed, three-minute accounting watermark before
+posting credentials directly to FortiGate. If the native continuation leaves
+the login tab waiting, the page polls the restricted same-origin action
+`/cake4/rd_cake/radaccts/portal-session-status.json` every two seconds.
+Only a newer active Accounting row for the submitted username and the actual
+requesting IP confirms the login; older, closed and other-device sessions do
+not. Passwords are never sent to this action. The portal listener exposes
+only this action, without opening other admin API routes. Direct browser-to-portal
+IP routing is required for this fallback (source NAT would prevent matching
+`Framed-IP-Address`). The usual native success continuation remains enabled.
+
+Debug on the server with:
+
+```bash
+sudo docker exec -it radiusdesk sh -c 'tail -n 0 -F /var/www/html/cake4/rd_cake/logs/debug.log | grep --line-buffered "portal-session"'
+```
+
+`portal-session started` records the caller IP and username; `portal-session
+confirmed` indicates that the new Accounting session was found. No passwords
+or confirmation tokens are logged.
