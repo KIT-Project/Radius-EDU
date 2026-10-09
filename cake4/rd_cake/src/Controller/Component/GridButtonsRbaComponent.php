@@ -94,25 +94,6 @@ class GridButtonsRbaComponent extends Component {
                      'tpl' => [
                             '<div class="radacct-stats">',
 
-                                '<tpl if="activeData == true">',
-                                    '<div class="stat-item">',
-                                        '<i class="fa fa-arrow-down"></i>',
-                                        '<span class="value">{in}</span>',
-                                        '<span class="label">In</span>',
-                                    '</div>',
-
-                                    '<div class="stat-item">',
-                                        '<i class="fa fa-arrow-up"></i>',
-                                        '<span class="value">{out}</span>',
-                                        '<span class="label">Out</span>',
-                                    '</div>',
-
-                                    '<div class="stat-item">',
-                                        "<span class='fa' style='font-family:FontAwesome;'>&#xf0ec</span>",
-                                        '<span class="value">{total}</span>',
-                                        '<span class="label">Total</span>',
-                                    '</div>',
-                                '</tpl>',
                                 '<div class="stat-item">',
                                     '<i class="fa fa-users"></i>',
                                     '<span class="value">{total_connected}</span>',
