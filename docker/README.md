@@ -273,29 +273,43 @@ Permanent Users → Edit → RADIUS info. Values are whole numbers from 0 to 20;
 so no database migration is required.
 
 For non-EAP requests from NAS identifiers beginning with `FortiGate`, RADIUS
-counts distinct active Accounting NAS/IP identities for the username and rejects
-a new device when the limit is reached. FortiGate can report a shared MAC for
-different clients, so IP is preferred over MAC. Missing IPs fall back to normalized
-MAC/session identity. Only a request carrying the same Framed-IP-Address and
-NAS-IP-Address as an active row may reuse that slot. A matching MAC alone never
-bypasses the limit. If FortiGate omits request IP, reauthentication at a full
-limit requires the previous session's Accounting Stop first. Closed rows are
-ignored. Accounting Start/Interim/Stop must arrive reliably; stale open rows
-continue to occupy slots. Requests arriving together before their Accounting
-Start records arrive can exceed the limit: this check does not reserve slots.
-Changing the setting does not itself guarantee removal of existing devices;
-verify the limit with new logins after active sessions are accounted for.
+checks the limit after successful password verification. When all slots are in
+use, it sends Disconnect-Request for the oldest active NAS/IP, waits for a valid
+Disconnect-ACK and real Accounting Stop, and then accepts the new login. For
+example, with a limit of 3, the fourth device replaces the oldest of the first
+three. Wrong passwords never disconnect existing devices. No logout page is
+required. Lowering the limit takes effect on the next successful login and can
+remove multiple old devices to make room.
 
-Validation used an isolated RADIUS listener and `docker/tests/device_limit.php`
-against a disposable local database: third device accepted, fourth rejected,
-same-NAS/IP reauthentication, shared-MAC different-IP clients, missing request IP,
-duplicate/closed rows, Accounting Stop,
-unlimited mode, edited limits, invalid inputs, and unrelated NAS requests.
-The script requires a local-only test server on port 19120 invoking
-`RADIUSdesk_fortigate_device_limit` with PAP password `device-limit-fixture`.
-Do not run it on the production database.
+The NAS must be configured as `FortiGate-COA` with the correct shared secret and
+CoA port (normally UDP 3799). Dynamic clients are matched by NAS identifier and
+user cloud; static NAS entries match the recorded NAS IP or identifier in the
+same cloud (or global cloud -1). Ambiguous or unsupported NAS settings, invalid
+responses and missing Accounting Stop reject the new login. The helper never
+fabricates stopped accounting rows. If Stop arrives after the short wait, retry
+the login. This requires reliable Accounting Start/Interim/Stop delivery.
+
+Device identity is NAS/IP because FortiGate can report a shared MAC for different
+clients. Duplicate active rows for one NAS/IP count once; closed rows are ignored.
+Missing accounting IPs fall back to MAC/session identity for counting, but cannot
+be disconnected automatically without a valid client IP.
+A request with the same explicit Framed-IP-Address and NAS-IP-Address can reuse its
+slot. Without a request IP, a full account replaces its oldest session, even for
+reauthentication. The user lock serializes replacement work, but does not reserve
+slots between Access-Accept and Accounting Start: logins arriving together before
+new Start records arrive can still exceed the limit.
+
+Validation uses an isolated local PAP listener on 19120 and
+`docker/tests/device_limit.php` against a disposable local DB. Its local UDP NAS
+mock returns authenticated ACKs and simulates Accounting Stop. The test covers
+oldest-first replacement, bad-password protection, missing ACK/Stop, shared MACs,
+missing request IP, edited limits, unlimited mode and unrelated NAS requests.
+The listener must invoke `RADIUSdesk_fortigate_device_replace` in both normal
+post-auth and Post-Auth-Type REJECT, with PAP password `device-limit-fixture`.
+Never run this fixture on the production database.
 
 Deploy with the usual `git pull origin Dev` and
-`docker compose up -d --build radiusdesk`, then refresh the admin page.
-Test on FortiGate with 3 devices using the same user, followed by a fourth.
-Disconnect one of the first three, wait for Accounting Stop, and retry the fourth.
+`docker compose up -d --build radiusdesk`. No DB migration is required.
+On the real FortiGate, set a user to 1, log in on the first device, then log in on
+the second: the first should lose access and the second should gain access.
+Check the old Accounting Stop and new Accounting Start in the dashboard.

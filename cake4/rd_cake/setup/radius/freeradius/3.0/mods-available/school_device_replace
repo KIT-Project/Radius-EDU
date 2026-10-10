@@ -1,0 +1,8 @@
+exec school_device_replace {
+    wait = yes
+    program = "/usr/bin/php /var/www/html/cake4/rd_cake/setup/scripts/radius/replace_oldest_device.php"
+    input_pairs = session-state
+    output_pairs = reply
+    shell_escape = no
+    timeout = 15
+}
