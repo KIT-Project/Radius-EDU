@@ -192,8 +192,9 @@ Ext.define('Rd.view.permanentUsers.pnlPermanentUserBasic', {
                     realm_id    : realm_id
                 },
                 {
-                    xtype       : 'cmbSessionLimit',
-                    labelClsExtra: 'lblRd'
+                    xtype:'numberfield', name:'session_limit', fieldLabel:'จำนวนอุปกรณ์พร้อมกัน',
+                    value:0, minValue:0, maxValue:20, allowDecimals:false, allowBlank:false,
+                    afterSubTpl:'<div>0 = ไม่จำกัด · นับเฉพาะเครื่องที่ออนไลน์พร้อมกัน</div>'
                 }
             ]
         }

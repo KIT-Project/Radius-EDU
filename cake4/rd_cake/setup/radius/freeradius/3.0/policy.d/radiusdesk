@@ -38,6 +38,7 @@ RADIUSdesk.authorize {
     #RADIUSdesk -> expiration and logintime will set a reply attribute for Session-Timeout. 
     #We may however have to override it if
     #the **time based counter** or the Voucher's **time left** is **smaller** than the Session-Timeout
+    RADIUSdesk_fortigate_device_limit
     RADIUSdesk_fortigate_session_limits
     RADIUSdesk_session_timeout
     RADIUSdesk_logintime
@@ -1389,3 +1390,25 @@ RADIUSdesk_acct {
 }
 
 #____ END RADIUSdesk policies __________
+
+# Count online devices, not historical sessions. Reauthentication by the same
+# MAC does not consume another slot. Missing MACs fall back to IP/session IDs.
+# SQL expansions use the SQL module's escaping for request values.
+RADIUSdesk_fortigate_device_limit {
+    if ((!&request:EAP-Message) && (&request:NAS-Identifier) && (&request:NAS-Identifier =~ /^FortiGate/)) {
+        update control {
+            Tmp-Integer-0 := "%{sql:SELECT COALESCE(MAX(session_limit),0) FROM permanent_users WHERE username='%{request:User-Name}'}"
+        }
+        if (&control:Tmp-Integer-0 > 0) {
+            update control {
+                Tmp-Integer-1 := "%{sql:SELECT COUNT(DISTINCT COALESCE(NULLIF(LOWER(REPLACE(REPLACE(callingstationid,':',''),'-','')),''),NULLIF(framedipaddress,''),CONCAT('session:',acctuniqueid))) FROM radacct WHERE username='%{request:User-Name}' AND acctstoptime IS NULL AND (LOWER(REPLACE(REPLACE('%{request:Calling-Station-Id}',':',''),'-',''))='' OR LOWER(REPLACE(REPLACE(COALESCE(callingstationid,''),':',''),'-',''))<>LOWER(REPLACE(REPLACE('%{request:Calling-Station-Id}',':',''),'-','')))}"
+            }
+            if (&control:Tmp-Integer-1 >= &control:Tmp-Integer-0) {
+                update reply {
+                    Reply-Message := "Active device limit reached. Disconnect another device before logging in."
+                }
+                reject
+            }
+        }
+    }
+}

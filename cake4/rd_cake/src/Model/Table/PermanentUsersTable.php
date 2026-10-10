@@ -69,6 +69,8 @@ class PermanentUsersTable extends Table{
                     'provider' => 'table'
                 ]
             ])
+            ->integer('session_limit', 'Device limit must be a whole number')
+            ->range('session_limit', [0, 20], 'Device limit must be between 0 and 20')
             ->allowEmptyString('static_ip')
             ->add('static_ip', [
                 'nameUnique' => [

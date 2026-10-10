@@ -270,6 +270,23 @@
     }
     function populate() {
         if (window.schoolUi.enabled) {
+            Ext.ComponentQuery.query('winPermanentUserAdd, pnlPermanentUserBasic').forEach(function (panel) {
+                if (panel.schoolDeviceLimitReady) return;
+                var editing = panel.isXType('pnlPermanentUserBasic');
+                var anchor = panel.down(editing ? '[name=profile_id]' : '[name=password]');
+                if (!anchor || !anchor.ownerCt) return;
+                var old = panel.down('[name=session_limit]');
+                var value = old ? old.getValue() : 0;
+                if (old) old.ownerCt.remove(old, true);
+                panel.schoolDeviceLimitReady = true;
+                anchor.ownerCt.insert(anchor.ownerCt.items.indexOf(anchor) + 1, {
+                    xtype:'numberfield', name:'session_limit', fieldLabel:'จำนวนอุปกรณ์พร้อมกัน',
+                    value:value || 0, minValue:0, maxValue:20, allowDecimals:false,
+                    allowBlank:false, labelWidth:170, width:460,
+                    afterSubTpl:'<div style="color:#718096;margin-top:5px">0 = ไม่จำกัด · นับเฉพาะเครื่องที่ออนไลน์พร้อมกัน</div>'
+                });
+                panel.updateLayout();
+            });
             Ext.ComponentQuery.query('pnlAddEditProfile').forEach(function (form) {
                 if (form.schoolSessionStyled) return;
                 form.schoolSessionStyled = true;

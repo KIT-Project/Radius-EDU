@@ -264,3 +264,34 @@ sudo docker exec -it radiusdesk sh -c 'tail -n 0 -F /var/www/html/cake4/rd_cake/
 `portal-session started` records the caller IP and username; `portal-session
 confirmed` indicates that the new Accounting session was found. No passwords
 or confirmation tokens are logged.
+
+### Concurrent device limits for school users
+
+Set **จำนวนอุปกรณ์พร้อมกัน** in user creation or immediately below Profile in
+Permanent Users → Edit → RADIUS info. Values are whole numbers from 0 to 20;
+0 means unlimited. The existing `permanent_users.session_limit` column is used,
+so no database migration is required.
+
+For non-EAP requests from NAS identifiers beginning with `FortiGate`, RADIUS
+counts distinct active Accounting devices for the username and rejects a new
+device when the limit is reached. MAC separators/case are normalized, duplicate
+rows for the same MAC count once, and reauthentication by an existing MAC is
+allowed. Without a MAC, counting falls back to IP/session identity. Closed rows
+are ignored. Accounting Start/Interim/Stop must arrive reliably; stale open rows
+continue to occupy slots. Requests arriving together before their Accounting
+Start records arrive can exceed the limit: this check does not reserve slots.
+Changing the setting does not itself guarantee removal of existing devices;
+verify the limit with new logins after active sessions are accounted for.
+
+Validation used an isolated RADIUS listener and `docker/tests/device_limit.php`
+against a disposable local database: third device accepted, fourth rejected,
+same-MAC reauthentication, missing MAC, duplicate/closed rows, Accounting Stop,
+unlimited mode, edited limits, invalid inputs, and unrelated NAS requests.
+The script requires a local-only test server on port 19120 invoking
+`RADIUSdesk_fortigate_device_limit` with PAP password `device-limit-fixture`.
+Do not run it on the production database.
+
+Deploy with the usual `git pull origin Dev` and
+`docker compose up -d --build radiusdesk`, then refresh the admin page.
+Test on FortiGate with 3 devices using the same user, followed by a fourth.
+Disconnect one of the first three, wait for Accounting Stop, and retry the fourth.
