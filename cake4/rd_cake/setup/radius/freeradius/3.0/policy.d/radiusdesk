@@ -1391,8 +1391,9 @@ RADIUSdesk_acct {
 
 #____ END RADIUSdesk policies __________
 
-# Count online devices, not historical sessions. Reauthentication by the same
-# MAC does not consume another slot. Missing MACs fall back to IP/session IDs.
+# Count online NAS/IP identities first: FortiGate can report a shared MAC
+# for different clients. Only a matching request Framed-IP-Address and NAS
+# may reuse a slot; MAC alone is never evidence that this is the same device.
 # SQL expansions use the SQL module's escaping for request values.
 RADIUSdesk_fortigate_device_limit {
     if ((!&request:EAP-Message) && (&request:NAS-Identifier) && (&request:NAS-Identifier =~ /^FortiGate/)) {
@@ -1401,7 +1402,7 @@ RADIUSdesk_fortigate_device_limit {
         }
         if (&control:Tmp-Integer-0 > 0) {
             update control {
-                Tmp-Integer-1 := "%{sql:SELECT COUNT(DISTINCT COALESCE(NULLIF(LOWER(REPLACE(REPLACE(callingstationid,':',''),'-','')),''),NULLIF(framedipaddress,''),CONCAT('session:',acctuniqueid))) FROM radacct WHERE username='%{request:User-Name}' AND acctstoptime IS NULL AND (LOWER(REPLACE(REPLACE('%{request:Calling-Station-Id}',':',''),'-',''))='' OR LOWER(REPLACE(REPLACE(COALESCE(callingstationid,''),':',''),'-',''))<>LOWER(REPLACE(REPLACE('%{request:Calling-Station-Id}',':',''),'-','')))}"
+                Tmp-Integer-1 := "%{sql:SELECT COUNT(DISTINCT CONCAT(nasipaddress,'|',COALESCE(CONCAT('ip:',NULLIF(NULLIF(framedipaddress,''),'0.0.0.0')),CONCAT('mac:',NULLIF(LOWER(REPLACE(REPLACE(callingstationid,':',''),'-','')),'')),CONCAT('session:',acctuniqueid)))) FROM radacct WHERE username='%{request:User-Name}' AND acctstoptime IS NULL AND NOT (COALESCE(framedipaddress,'')='%{request:Framed-IP-Address}' AND nasipaddress='%{request:NAS-IP-Address}' AND '%{request:Framed-IP-Address}' NOT IN ('','0.0.0.0'))}"
             }
             if (&control:Tmp-Integer-1 >= &control:Tmp-Integer-0) {
                 update reply {

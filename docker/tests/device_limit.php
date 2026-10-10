@@ -18,22 +18,22 @@ if (!preg_match('/client localhost\s*\{.*?secret\s*=\s*([^\s#]+)/s', $conf, $mat
 $secretFile = tempnam('/tmp', 'device-limit-secret-');
 chmod($secretFile, 0600);
 file_put_contents($secretFile, trim($match[1], '"') . "\n");
-$authenticate = function ($label, $expected, $mac='AA:BB:CC:00:00:04', $nas='FortiGate-Test') use ($username, $secretFile) {
+$authenticate = function ($label, $expected, $mac='AA:BB:CC:00:00:04', $nas='FortiGate-Test', $ip='192.0.2.4') use ($username, $secretFile) {
     $pipes = [];
     $process = proc_open(['radclient','-x','-r','1','-t','2','-S',$secretFile,'127.0.0.1:19120','auth'],
         [['pipe','r'],['pipe','w'],['pipe','w']], $pipes);
-    fwrite($pipes[0], 'User-Name = "'.$username.'"' . "\nUser-Password = \"device-limit-fixture\"\nNAS-Identifier = \"$nas\"\nMessage-Authenticator = 0x00\n" . ($mac === null ? '' : "Calling-Station-Id = \"$mac\"\n"));
+    fwrite($pipes[0], 'User-Name = "'.$username.'"' . "\nUser-Password = \"device-limit-fixture\"\nNAS-Identifier = \"$nas\"\nMessage-Authenticator = 0x00\nNAS-IP-Address = 127.0.0.1\n" . ($ip === null ? '' : "Framed-IP-Address = $ip\n") . ($mac === null ? '' : "Calling-Station-Id = \"$mac\"\n"));
     fclose($pipes[0]);
     $output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
     fclose($pipes[1]); fclose($pipes[2]); proc_close($process);
     if (!str_contains($output, 'Received '.$expected)) throw new RuntimeException($label.' failed: '.$output);
     echo $label . ": PASS\n";
 };
-$add = function ($mac, $closed=false) use ($db, $username) {
+$add = function ($mac, $closed=false, $ip=null) use ($db, $username) {
     $db->insert('radacct', ['username'=>$username, 'acctsessionid'=>bin2hex(random_bytes(8)),
         'acctuniqueid'=>bin2hex(random_bytes(16)), 'nasipaddress'=>'127.0.0.1', 'nasidentifier'=>'FortiGate-Test',
         'acctinputoctets'=>0, 'acctoutputoctets'=>0, 'acctsessiontime'=>0, 'callingstationid'=>$mac, 'acctstarttime'=>date('Y-m-d H:i:s'), 'acctupdatetime'=>date('Y-m-d H:i:s'),
-        'acctstoptime'=>$closed ? date('Y-m-d H:i:s') : null, 'framedipaddress'=>'192.0.2.10']);
+        'acctstoptime'=>$closed ? date('Y-m-d H:i:s') : null, 'framedipaddress'=>$ip ?? '192.0.2.'.hexdec(substr($mac,-2))]);
 };
 try {
     $entity = $table->newEntity($data); $table->saveOrFail($entity);
@@ -48,17 +48,25 @@ try {
     $authenticate('Third device allowed', 'Access-Accept');
     $add('aa-bb-cc-00-00-03');
     $authenticate('Fourth device rejected', 'Access-Reject');
-    $authenticate('Existing device reauthentication', 'Access-Accept', 'AA:BB:CC:00:00:01');
+    $authenticate('Existing device reauthentication', 'Access-Accept', 'AA:BB:CC:00:00:01', 'FortiGate-Test', '192.0.2.1');
     $authenticate('Missing MAC still enforces limit', 'Access-Reject', null);
     $authenticate('Other NAS unaffected', 'Access-Accept', 'AA:BB:CC:00:00:04', 'Other-Test');
     $db->update('radacct', ['acctstoptime'=>date('Y-m-d H:i:s')], ['username'=>$username,'callingstationid'=>'aa-bb-cc-00-00-03']);
     $authenticate('Slot released after Stop', 'Access-Accept');
     $add('AA:BB:CC:00:00:01');
-    $authenticate('Duplicate rows for same MAC count once', 'Access-Accept');
+    $authenticate('Duplicate rows for same NAS/IP count once', 'Access-Accept');
     $add('aa-bb-cc-00-00-05', true);
     $authenticate('Closed history ignored', 'Access-Accept');
     $entity = $table->patchEntity($entity, ['session_limit'=>1]); $table->saveOrFail($entity);
     $authenticate('Edited limit enforced', 'Access-Reject');
+    $db->delete('radacct', ['username'=>$username]);
+    $add('4C-D5-87-51-B5-40', false, '192.168.23.61');
+    $authenticate('Shared FortiGate MAC with different IP blocked', 'Access-Reject', '4C:D5:87:51:B5:40', 'FortiGate-Test', '192.168.23.2');
+    $authenticate('Shared MAC without request IP cannot bypass limit', 'Access-Reject', '4C:D5:87:51:B5:40', 'FortiGate-Test', null);
+    $authenticate('Same NAS/IP reauthentication still allowed', 'Access-Accept', '4C:D5:87:51:B5:40', 'FortiGate-Test', '192.168.23.61');
+    $entity = $table->patchEntity($entity, ['session_limit'=>2]); $table->saveOrFail($entity);
+    $add('4C-D5-87-51-B5-40', false, '192.168.23.2');
+    $authenticate('Two IPs with shared MAC occupy two slots', 'Access-Reject', '4C:D5:87:51:B5:40', 'FortiGate-Test', '192.168.23.3');
     $entity = $table->patchEntity($entity, ['session_limit'=>0]); $table->saveOrFail($entity);
     $authenticate('Zero means unlimited', 'Access-Accept');
 } finally {

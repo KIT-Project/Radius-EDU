@@ -273,11 +273,14 @@ Permanent Users → Edit → RADIUS info. Values are whole numbers from 0 to 20;
 so no database migration is required.
 
 For non-EAP requests from NAS identifiers beginning with `FortiGate`, RADIUS
-counts distinct active Accounting devices for the username and rejects a new
-device when the limit is reached. MAC separators/case are normalized, duplicate
-rows for the same MAC count once, and reauthentication by an existing MAC is
-allowed. Without a MAC, counting falls back to IP/session identity. Closed rows
-are ignored. Accounting Start/Interim/Stop must arrive reliably; stale open rows
+counts distinct active Accounting NAS/IP identities for the username and rejects
+a new device when the limit is reached. FortiGate can report a shared MAC for
+different clients, so IP is preferred over MAC. Missing IPs fall back to normalized
+MAC/session identity. Only a request carrying the same Framed-IP-Address and
+NAS-IP-Address as an active row may reuse that slot. A matching MAC alone never
+bypasses the limit. If FortiGate omits request IP, reauthentication at a full
+limit requires the previous session's Accounting Stop first. Closed rows are
+ignored. Accounting Start/Interim/Stop must arrive reliably; stale open rows
 continue to occupy slots. Requests arriving together before their Accounting
 Start records arrive can exceed the limit: this check does not reserve slots.
 Changing the setting does not itself guarantee removal of existing devices;
@@ -285,7 +288,8 @@ verify the limit with new logins after active sessions are accounted for.
 
 Validation used an isolated RADIUS listener and `docker/tests/device_limit.php`
 against a disposable local database: third device accepted, fourth rejected,
-same-MAC reauthentication, missing MAC, duplicate/closed rows, Accounting Stop,
+same-NAS/IP reauthentication, shared-MAC different-IP clients, missing request IP,
+duplicate/closed rows, Accounting Stop,
 unlimited mode, edited limits, invalid inputs, and unrelated NAS requests.
 The script requires a local-only test server on port 19120 invoking
 `RADIUSdesk_fortigate_device_limit` with PAP password `device-limit-fixture`.
