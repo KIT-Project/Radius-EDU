@@ -6,6 +6,20 @@
     const button = document.getElementById('submitButton');
     const status = document.getElementById('status');
     const retry = document.getElementById('retryLogin');
+    // Trigger a fresh HTTP captive-portal challenge. Google can be upgraded to
+    // HTTPS by HSTS, preventing the gateway from intercepting the request.
+    function freshChallengeUrl() {
+        const url = new URL('http://neverssl.com/');
+        url.searchParams.set('school_wifi_retry', Date.now() + '-' +
+            Array.from(window.crypto.getRandomValues(new Uint8Array(8)),
+                byte => byte.toString(16).padStart(2, '0')).join(''));
+        return url.href;
+    }
+    retry.href = freshChallengeUrl();
+    retry.addEventListener('click', function () {
+        // A second click/back navigation must not reuse a cached redirect/token.
+        retry.href = freshChallengeUrl();
+    });
     const params = new URLSearchParams(window.location.search);
     const failed = (params.get('Auth') || '').toLowerCase() === 'failed';
     const attempt = Array.from(window.crypto.getRandomValues(new Uint8Array(16)),
@@ -125,8 +139,8 @@
         status.textContent = 'เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจสอบชื่อผู้ใช้และรหัสผ่าน หากข้อมูลถูกต้อง โปรดติดต่อผู้ดูแลระบบเพื่อตรวจสอบสิทธิ์การใช้งาน';
         document.getElementById('password').value = '';
         // FortiGate can return Auth=Failed without a new transaction token.
-        // Request a fresh challenge via HTTP Google. If the gateway uses the original
-        // destination instead of CONTINUE_URL after a retry, it still lands on Google.
+        // Request a fresh challenge via non-HSTS HTTP; successful authentication
+        // continues to success.html and Google through the new login transaction.
         if (!ready) {
             form.hidden = true;
             retry.hidden = false;
