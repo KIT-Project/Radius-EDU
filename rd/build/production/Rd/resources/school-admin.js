@@ -283,7 +283,7 @@
                     xtype:'numberfield', name:'session_limit', fieldLabel:'จำนวนอุปกรณ์พร้อมกัน',
                     value:value || 0, minValue:0, maxValue:20, allowDecimals:false,
                     allowBlank:false, labelWidth:170, width:460,
-                    afterSubTpl:'<div style="color:#718096;margin-top:5px">0 = ไม่จำกัด · นับเฉพาะเครื่องที่ออนไลน์พร้อมกัน</div>'
+                    afterSubTpl:'<div style="color:#718096;margin-top:5px">0 = ไม่จำกัด</div>'
                 });
                 panel.updateLayout();
             });
