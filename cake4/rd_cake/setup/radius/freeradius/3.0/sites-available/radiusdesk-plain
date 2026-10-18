@@ -71,7 +71,16 @@ server radiusdesk-plain {
 
     post-auth {
     
-        RADIUSdesk       
+        RADIUSdesk
+
+        # Request periodic usage counters from the NAS on successful logins.
+        # Preserve an explicit interval supplied by the user/profile.
+        if (!&reply:Acct-Interim-Interval) {
+            update reply {
+                Acct-Interim-Interval := 60
+            }
+        }
+
         Post-Auth-Type REJECT {
 		    attr_filter.access_reject
 

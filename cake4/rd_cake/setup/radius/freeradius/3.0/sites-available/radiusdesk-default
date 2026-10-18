@@ -979,6 +979,15 @@ post-auth {
 	
 	RADIUSdesk
 
+        # Request periodic usage counters from the NAS on successful logins.
+        # Preserve an explicit interval supplied by the user/profile.
+        if (!&reply:Acct-Interim-Interval) {
+            update reply {
+                Acct-Interim-Interval := 60
+            }
+        }
+
+
 	#
 	#  Access-Reject packets are sent through the REJECT sub-section of the
 	#  post-auth section.
