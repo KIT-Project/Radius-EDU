@@ -691,6 +691,37 @@ class PermanentUsersController extends AppController{
             return;
         } 
         
+        if ($this->request->getData('school_rename') === '1') {
+            $this->request->allowMethod(['post']);
+            try {
+                $data = $this->request->getData();
+                if (!is_string($data['username'] ?? null) || !is_string($data['old_username'] ?? null) ||
+                    filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
+                    throw new \InvalidArgumentException('ข้อมูลเปลี่ยนชื่อไม่ถูกต้อง');
+                }
+                $change = (new \App\Service\PermanentUserRename())->rename(
+                    $this->PermanentUsers, (int)$data['id'], (int)$data['cloud_id'],
+                    $data['old_username'], $data['username'], $this->Aa->realmCheck()
+                );
+            } catch (\InvalidArgumentException $e) {
+                $this->set(['success' => false, 'message' => $e->getMessage()]);
+                $this->viewBuilder()->setOption('serialize', true);
+                return;
+            } catch (\Throwable $e) {
+                Log::error('Permanent-user rename failed: ' . get_class($e));
+                $this->set(['success' => false, 'message' => 'เปลี่ยนชื่อไม่สำเร็จ ระบบยกเลิกการเปลี่ยนแปลง']);
+                $this->viewBuilder()->setOption('serialize', true);
+                return;
+            }
+            $this->AuditLogService->log('permanent_users.rename', $this->request, [
+                'entity' => 'PermanentUsers', 'entity_id' => $change['id'],
+                'changes' => ['username' => ['old' => $change['old'], 'new' => $change['new']]]
+            ]);
+            $this->set(['success' => true, 'username' => $change['new']]);
+            $this->viewBuilder()->setOption('serialize', true);
+            return;
+        }
+
         if ($this->request->getData('school_bulk_edit') === '1') {
             $this->request->allowMethod(['post']);
             $this->schoolBulkEdit();

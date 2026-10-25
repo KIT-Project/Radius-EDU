@@ -268,6 +268,40 @@
             win.close(); Ext.Msg.alert('โหลดข้อมูลไม่สำเร็จ','กรุณาเปิดการตั้งเวลาใหม่อีกครั้ง');
         });
     }
+    function renameUser(grid) {
+        var selected=grid.getSelectionModel().getSelection();
+        if (selected.length !== 1) {Ext.Msg.alert('เปลี่ยนชื่อผู้ใช้','เลือกผู้ใช้หนึ่งคน');return;}
+        var record=selected[0], old=record.get('username'), cloud=Ext.getApplication().getCloudId();
+        var form=Ext.create('Ext.form.Panel',{bodyPadding:20,layout:'anchor',defaults:{anchor:'100%',labelAlign:'top',margin:'0 0 14 0'},items:[
+            {xtype:'displayfield',fieldLabel:'ชื่อเดิม',value:escape(old)},
+            {xtype:'textfield',name:'username',fieldLabel:'ชื่อผู้ใช้ใหม่',value:old,allowBlank:false,minLength:2,maxLength:64,
+                regex:/^[A-Za-z0-9][A-Za-z0-9._@+-]{1,63}$/,regexText:'ใช้ภาษาอังกฤษ ตัวเลข และ . _ @ + - โดยไม่มีช่องว่าง'}
+        ]});
+        var win=Ext.create('Ext.window.Window',{title:'เปลี่ยนชื่อผู้ใช้',modal:true,width:Math.min(500,window.innerWidth-32),layout:'fit',items:form,
+            buttons:[{text:'ยกเลิก',handler:function(){win.close();}},{text:'เปลี่ยนชื่อ',handler:function(button){
+                if (!form.getForm().isValid()) return;
+                var name=form.down('[name=username]').getValue();
+                if (name===old) {Ext.Msg.alert('เปลี่ยนชื่อผู้ใช้','กรุณาระบุชื่อใหม่');return;}
+                Ext.Msg.confirm('ยืนยันเปลี่ยนชื่อ',escape(old)+' → '+escape(name),function(answer){
+                    if(answer!=='yes'||win.destroyed)return;
+                    button.disable();win.setLoading(true);
+                    Ext.Ajax.request({url:'/cake4/rd_cake/permanent-users/edit-basic-info.json',method:'POST',params:{
+                        cloud_id:cloud,id:record.getId(),school_rename:'1',old_username:old,username:name
+                    },success:function(response){
+                        var result;try{result=JSON.parse(response.responseText);}catch(_){}
+                        if(win.destroyed)return;
+                        win.setLoading(false);button.enable();
+                        if(!result||!result.success){Ext.Msg.alert('เปลี่ยนชื่อไม่สำเร็จ',escape(result&&result.message||'กรุณาตรวจสอบข้อมูลและสิทธิ์'));return;}
+                        // Close stale editor tabs: they still contain the previous username.
+                        Ext.ComponentQuery.query('pnlPermanentUser').forEach(function(panel){
+                            if(String(panel.pu_id)===String(record.getId()) && panel.closable) panel.close();
+                        });
+                        win.close();grid.getSelectionModel().deselectAll();grid.getStore().reload();
+                        Ext.Msg.alert('เปลี่ยนชื่อสำเร็จ','ใช้ชื่อ '+escape(result.username)+' เข้าสู่ระบบด้วยรหัสผ่านเดิม');
+                    },failure:function(){if(!win.destroyed){win.setLoading(false);button.enable();Ext.Msg.alert('ตรวจสอบผล','การเชื่อมต่อขัดข้อง กรุณาโหลดรายชื่อใหม่เพื่อตรวจสอบก่อนลองอีกครั้ง');}}});
+                });
+            }}]});win.show();
+    }
     function bulkUserSettings(grid) {
         var records = grid.getSelectionModel().getSelection().slice();
         if (!records.length) { Ext.Msg.alert('แก้ไขผู้ใช้','กรุณาติ๊กเลือกผู้ใช้ก่อน'); return; }
@@ -332,8 +366,10 @@
                 grid.schoolBulkUsersReady=true;
                 var button=toolbar.add({xtype:'button',itemId:'schoolBulkUsers',text:'แก้ไขผู้ใช้ที่เลือก',disabled:true,
                     handler:function () {bulkUserSettings(grid);}});
+                var rename=toolbar.add({xtype:'button',itemId:'schoolRenameUser',text:'เปลี่ยนชื่อผู้ใช้',disabled:true,handler:function(){renameUser(grid);}});
                 var update=function () {
                     var count=grid.getSelectionModel().getSelection().length;
+                    rename.setDisabled(count!==1 || edit.disabled);rename.setVisible(!edit.hidden);
                     button.setText('แก้ไขผู้ใช้ที่เลือก ('+count+')');
                     button.setDisabled(!count || edit.disabled);button.setVisible(!edit.hidden);
                 };
