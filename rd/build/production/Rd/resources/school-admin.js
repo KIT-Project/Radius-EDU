@@ -268,9 +268,87 @@
             win.close(); Ext.Msg.alert('โหลดข้อมูลไม่สำเร็จ','กรุณาเปิดการตั้งเวลาใหม่อีกครั้ง');
         });
     }
+    function bulkUserSettings(grid) {
+        var records = grid.getSelectionModel().getSelection().slice();
+        if (!records.length) { Ext.Msg.alert('แก้ไขผู้ใช้','กรุณาติ๊กเลือกผู้ใช้ก่อน'); return; }
+        if (records.length > 500) { Ext.Msg.alert('แก้ไขผู้ใช้','เลือกได้ครั้งละไม่เกิน 500 คน'); return; }
+        var cloud = Ext.getApplication().getCloudId();
+        var items = [{xtype:'component',html:'เลือก '+records.length+' คน — ติ๊กเฉพาะค่าที่ต้องการเปลี่ยน ช่องอื่นจะคงค่าเดิม'}];
+        [
+            ['realm_id','Realm',{xtype:'cmbRealm',allOption:false}],
+            ['profile_id','Profile',{xtype:'cmbProfile'}],
+            ['session_limit','จำนวนอุปกรณ์พร้อมกัน',{xtype:'numberfield',value:0,minValue:0,maxValue:20,allowDecimals:false,afterSubTpl:'<div>0 = ไม่จำกัด</div>'}]
+        ].forEach(function (spec) {
+            items.push({xtype:'checkbox',boxLabel:'เปลี่ยน '+spec[1],itemId:'change_'+spec[0],listeners:{change:function (box,value) {
+                var field = box.up('form').down('[name='+spec[0]+']'); field.setDisabled(!value);
+            }}});
+            items.push(Ext.apply({name:spec[0],fieldLabel:spec[1],disabled:true,allowBlank:false},spec[2]));
+        });
+        items.push({xtype:'component',html:'เลือกทั้งหมดใช้เฉพาะรายการในหน้าปัจจุบัน การเปลี่ยนนี้ไม่สั่งตัดการเชื่อมต่อทันที และจะใช้ในการตรวจสอบสิทธิ์ครั้งถัดไป'});
+        var form = Ext.create('Ext.form.Panel',{bodyPadding:20,layout:'anchor',defaults:{anchor:'100%',labelAlign:'top',margin:'0 0 10 0'},items:items});
+        var win = Ext.create('Ext.window.Window',{title:'แก้ไขผู้ใช้ที่เลือก ('+records.length+' คน)',width:Math.min(500,window.innerWidth-32),modal:true,layout:'fit',items:form,
+            buttons:[{text:'ยกเลิก',handler:function () {win.close();}},{text:'บันทึก',handler:function (button) {
+                if (!form.getForm().isValid()) return;
+                var params = {cloud_id:cloud,school_bulk_edit:'1',ids:JSON.stringify(records.map(function (r) {return r.getId();}))};
+                var labels=[];
+                ['realm_id','profile_id','session_limit'].forEach(function (name) {
+                    if (!form.down('#change_'+name).getValue()) return;
+                    var field=form.down('[name='+name+']');params[name]=field.getValue();
+                    labels.push(escape(field.fieldLabel)+': '+escape(field.getRawValue()));
+                });
+                if (!labels.length) {Ext.Msg.alert('แก้ไขผู้ใช้','เลือกอย่างน้อยหนึ่งค่าที่ต้องการเปลี่ยน');return;}
+                Ext.Msg.confirm('ยืนยันการแก้ไข','เปลี่ยนข้อมูลผู้ใช้ '+records.length+' คน<br>'+labels.join('<br>'),function (answer) {
+                    if (answer !== 'yes' || win.destroyed) return;
+                    button.disable();win.setLoading(true);
+                    Ext.Ajax.request({url:'/cake4/rd_cake/permanent-users/edit-basic-info.json',method:'POST',params:params,
+                        success:function (response) {
+                            var result;try {result=JSON.parse(response.responseText);} catch (_) {}
+                            if (win.destroyed) return;
+                            win.setLoading(false);button.enable();
+                            if (!result || !result.success) {Ext.Msg.alert('บันทึกไม่สำเร็จ',escape(result && result.message || 'กรุณาตรวจสอบสิทธิ์และข้อมูล'));return;}
+                            win.close();grid.getSelectionModel().deselectAll();grid.getStore().reload();
+                            Ext.Msg.alert('บันทึกสำเร็จ','บันทึกข้อมูลผู้ใช้ '+result.updated+' คนแล้ว');
+                        },failure:function () {if (!win.destroyed) {win.setLoading(false);button.enable();Ext.Msg.alert('ตรวจสอบผลการบันทึก','การเชื่อมต่อขัดข้อง กรุณาโหลดรายการใหม่เพื่อตรวจสอบผลก่อนลองอีกครั้ง');}}
+                    });
+                });
+            }}]});
+        ['realm_id','profile_id'].forEach(function (name) {
+            var store=form.down('[name='+name+']').getStore();store.getProxy().setExtraParam('cloud_id',cloud);store.load();
+        });
+        win.show();
+    }
     function populate() {
+        document.querySelectorAll('.heading').forEach(function (heading) {
+            if (heading.textContent.trim() === 'RADIUS optional' && heading.style.display !== 'none') {
+                heading.style.setProperty('display', 'none', 'important');
+            }
+        });
         if (window.schoolUi.enabled) {
+            Ext.ComponentQuery.query('gridPermanentUsers').forEach(function (grid) {
+                if (grid.schoolBulkUsersReady) return;
+                var toolbar=grid.getDockedItems('toolbar[dock="top"]')[0];
+                var edit=grid.down('#edit');
+                if (!toolbar || !edit) return;
+                grid.schoolBulkUsersReady=true;
+                var button=toolbar.add({xtype:'button',itemId:'schoolBulkUsers',text:'แก้ไขผู้ใช้ที่เลือก',disabled:true,
+                    handler:function () {bulkUserSettings(grid);}});
+                var update=function () {
+                    var count=grid.getSelectionModel().getSelection().length;
+                    button.setText('แก้ไขผู้ใช้ที่เลือก ('+count+')');
+                    button.setDisabled(!count || edit.disabled);button.setVisible(!edit.hidden);
+                };
+                grid.getSelectionModel().on('selectionchange',update);
+                edit.on({enable:update,disable:update,show:update,hide:update});update();
+            });
+
             Ext.ComponentQuery.query('winPermanentUserAdd, pnlPermanentUserBasic').forEach(function (panel) {
+                // Keep optional values in the form so editing preserves existing settings.
+                panel.query('[name=static_ip], [name=mac_address], [name=extra_name], [name=extra_value], [name=site], [name=ppsk], cmbRealmVlans').forEach(function (field) {
+                    if (!field.hidden) field.hide();
+                });
+                panel.query('component').forEach(function (component) {
+                    if (component.html === 'RADIUS optional' && !component.hidden) component.hide();
+                });
                 if (panel.schoolDeviceLimitReady) return;
                 var editing = panel.isXType('pnlPermanentUserBasic');
                 var anchor = panel.down(editing ? '[name=profile_id]' : '[name=password]');
@@ -492,6 +570,11 @@
             // Client presentation adapter only; the server and HTTP payload are unchanged.
             response.responseText = JSON.stringify(data);
         });
+        Ext.ClassManager.onCreated(function () {
+            Ext.override(Ext.ClassManager.get('Rd.view.permanentUsers.gridPermanentUsers'), {
+                selModel:{type:'checkboxmodel',mode:'MULTI',checkOnly:true}
+            });
+        }, null, 'Rd.view.permanentUsers.gridPermanentUsers');
         new MutationObserver(populate).observe(document.documentElement,{childList:true,subtree:true});
         populate();
         return true;

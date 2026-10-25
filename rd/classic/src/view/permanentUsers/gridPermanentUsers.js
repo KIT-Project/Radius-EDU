@@ -2,6 +2,7 @@ Ext.define('Rd.view.permanentUsers.gridPermanentUsers' ,{
     extend:'Ext.grid.Panel',
     alias : 'widget.gridPermanentUsers',
     multiSelect: true,
+    selModel: {type: 'checkboxmodel', mode: 'MULTI', checkOnly: true},
     stateful: true,
     stateId: 'StateGridPermanentUsers',
     stateEvents :['groupclick','columnhide'],

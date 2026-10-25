@@ -691,6 +691,12 @@ class PermanentUsersController extends AppController{
             return;
         } 
         
+        if ($this->request->getData('school_bulk_edit') === '1') {
+            $this->request->allowMethod(['post']);
+            $this->schoolBulkEdit();
+            return;
+        }
+
         $req_d		= $this->request->getData();
        
         //---Set Realm related things---               
@@ -835,6 +841,77 @@ class PermanentUsersController extends AppController{
             $message = __('Could not update item');
             $this->JsonErrors->entityErros($entity,$message);
         }
+    }
+
+    // Reuses editBasicInfo's authentication, cloud access and edit permission.
+    private function schoolBulkEdit(): void {
+        $data = $this->request->getData();
+        try {
+            $ids = json_decode((string)($data['ids'] ?? ''), true);
+            if (!is_array($ids) || !$ids || count($ids) > 500) {
+                throw new \InvalidArgumentException('เลือกผู้ใช้ 1–500 คน');
+            }
+            foreach ($ids as $id) {
+                if (!is_scalar($id) || !ctype_digit((string)$id) || (int)$id < 1) {
+                    throw new \InvalidArgumentException('รหัสผู้ใช้ไม่ถูกต้อง');
+                }
+            }
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+            $cloud = (int)($data['cloud_id'] ?? 0);
+            $changes = [];
+            $realmList = $this->Aa->realmCheck();
+            foreach (['realm_id' => 'Realms', 'profile_id' => 'Profiles'] as $field => $model) {
+                if (!array_key_exists($field, $data)) { continue; }
+                if (!is_scalar($data[$field]) || !ctype_digit((string)$data[$field]) || (int)$data[$field] < 1) {
+                    throw new \InvalidArgumentException('Realm หรือ Profile ไม่ถูกต้อง');
+                }
+                $query = $this->{$model}->find()->where(['id' => (int)$data[$field], 'cloud_id' => $cloud]);
+                if ($model === 'Realms' && $realmList) { $query->where(['id IN' => $realmList]); }
+                $target = $query->first();
+                if (!$target) { throw new \InvalidArgumentException('ไม่พบ Realm หรือ Profile ที่มีสิทธิ์ใช้งาน'); }
+                $changes[$field] = $target->id;
+                $changes[$field === 'realm_id' ? 'realm' : 'profile'] = $target->name;
+            }
+            if (array_key_exists('session_limit', $data)) {
+                $limit = $data['session_limit'];
+                if (!is_scalar($limit) || !ctype_digit((string)$limit) || (int)$limit > 20) {
+                    throw new \InvalidArgumentException('จำนวนอุปกรณ์ต้องเป็นจำนวนเต็ม 0–20');
+                }
+                $changes['session_limit'] = (int)$limit;
+            }
+            if (!$changes) { throw new \InvalidArgumentException('เลือกอย่างน้อยหนึ่งค่าที่ต้องการเปลี่ยน'); }
+            $this->PermanentUsers->getConnection()->transactional(function () use ($ids, $cloud, $changes, $realmList) {
+                $query = $this->PermanentUsers->find()->where(['cloud_id' => $cloud, 'id IN' => $ids]);
+                if ($realmList) { $query->where(['realm_id IN' => $realmList]); }
+                $entities = $query->epilog('FOR UPDATE')->all()->toList();
+                if (count($entities) !== count($ids)) {
+                    throw new \InvalidArgumentException('มีผู้ใช้ที่ไม่พบหรือไม่มีสิทธิ์แก้ไข กรุณาโหลดรายการใหม่');
+                }
+                foreach ($entities as $entity) {
+                    // Reset VLAN when moving realm; do not retain a VLAN from the old realm.
+                    $patch = $changes;
+                    if (isset($patch['realm_id']) && (int)$entity->realm_id !== (int)$patch['realm_id']) {
+                        $patch['realm_vlan_id'] = null;
+                    }
+                    $this->PermanentUsers->patchEntity($entity, $patch, ['fields' => array_keys($patch)]);
+                    $this->PermanentUsers->saveOrFail($entity);
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            $this->set(['success' => false, 'message' => $e->getMessage()]);
+            $this->viewBuilder()->setOption('serialize', true);
+            return;
+        } catch (\Throwable $e) {
+            Log::error('Bulk permanent-user update failed: ' . get_class($e));
+            $this->set(['success' => false, 'message' => 'บันทึกไม่สำเร็จ ระบบยกเลิกการเปลี่ยนแปลงทั้งชุด']);
+            $this->viewBuilder()->setOption('serialize', true);
+            return;
+        }
+        $this->AuditLogService->log('permanent_users.bulk-edit', $this->request, [
+            'entity' => 'PermanentUsers', 'metadata' => ['user_ids' => $ids], 'changes' => $changes
+        ]);
+        $this->set(['success' => true, 'updated' => count($ids)]);
+        $this->viewBuilder()->setOption('serialize', true);
     }
 
     public function viewPersonalInfo(){
