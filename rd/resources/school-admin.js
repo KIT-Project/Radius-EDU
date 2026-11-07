@@ -400,6 +400,7 @@
             weight: 10,
             enableOverflow: true,
             itemId: 'userFilters',
+            layout: { type: 'hbox', align: 'bottom' },
             defaults: { labelAlign: 'top', margin: '0 8 0 0' },
             items: [
                 userFilterField('username', 'ค้นหา Username', 250),
