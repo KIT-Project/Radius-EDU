@@ -351,6 +351,97 @@
         });
         win.show();
     }
+    function addUserFilters(grid) {
+        if (grid.down("#userFilters")) return;
+        var me = grid;
+        function userFilterField(property, label, width) {
+            var me = grid;
+            return {
+                xtype: 'textfield',
+                itemId: 'userFilter-' + property,
+                fieldLabel: label,
+                emptyText: 'พิมพ์เพื่อค้นหา…',
+                width: width,
+                listeners: {
+                    change: {
+                        buffer: 350,
+                        fn: function(field, value) {
+                            if (!me.destroyed && !me.destroying) {
+                                // Read the current value in case Clear ran during the delay.
+                                setVisibleUserFilter(property, field.getValue(), 'like');
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        function setVisibleUserFilter(property, value, operator) {
+            if (grid.clearingUserFilters) {
+                return;
+            }
+            var id = 'visible-user-' + property;
+            value = Ext.String.trim(value || '');
+            if (value) {
+                grid.store.addFilter({
+                    id: id,
+                    property: property,
+                    operator: operator,
+                    value: value
+                });
+            } else if (grid.store.getFilters().get(id)) {
+                grid.store.removeFilter(id);
+            }
+        }
+        // Keep common filters visible instead of requiring the column menu.
+        me.addDocked({
+            xtype: 'toolbar',
+            dock: 'top',
+            weight: 10,
+            enableOverflow: true,
+            itemId: 'userFilters',
+            defaults: { labelAlign: 'top', margin: '0 8 0 0' },
+            items: [
+                userFilterField('username', 'ค้นหา Username', 250),
+                userFilterField('realm', 'Realm', 190),
+                userFilterField('profile', 'Profile', 190),
+                {
+                    xtype: 'combobox',
+                    itemId: 'userFilter-admin_state',
+                    fieldLabel: 'สถานะ',
+                    width: 180,
+                    queryMode: 'local',
+                    editable: false,
+                    forceSelection: true,
+                    value: '',
+                    store: [['', 'ทั้งหมด'], ['active', 'Active'],
+                        ['suspended', 'Suspended'], ['terminated', 'Terminated'],
+                        ['expired', 'Expired']],
+                    listeners: {
+                        change: function(field, value) {
+                            setVisibleUserFilter('admin_state', value, 'eq');
+                        }
+                    }
+                },
+                {
+                    xtype: 'button',
+                    text: 'ล้างตัวกรอง',
+                    iconCls: 'x-fa fa-times',
+                    handler: function() {
+                        // Clear column-menu filters too, so no hidden filter remains.
+                        me.clearingUserFilters = true;
+                        me.down('#userFilters').query('field').forEach(function(field) {
+                            field.setValue('');
+                        });
+                        me.filters.clearFilters();
+                        me.store.clearFilter();
+                        me.clearingUserFilters = false;
+                    }
+                }
+            ]
+        });
+
+    }
     function populate() {
         document.querySelectorAll('.heading').forEach(function (heading) {
             if (heading.textContent.trim() === 'RADIUS optional' && heading.style.display !== 'none') {
@@ -359,6 +450,7 @@
         });
         if (window.schoolUi.enabled) {
             Ext.ComponentQuery.query('gridPermanentUsers').forEach(function (grid) {
+                addUserFilters(grid);
                 if (grid.schoolBulkUsersReady) return;
                 var toolbar=grid.getDockedItems('toolbar[dock="top"]')[0];
                 var edit=grid.down('#edit');
