@@ -451,6 +451,16 @@
         });
         if (window.schoolUi.enabled) {
             Ext.ComponentQuery.query('gridPermanentUsers').forEach(function (grid) {
+                if (grid.rendered && !grid.schoolPersonalColumnsReady) {
+                    // Apply after saved grid state: older sessions hid these columns.
+                    grid.schoolPersonalColumnsReady = true;
+                    grid.getColumnManager().getColumns().forEach(function (column) {
+                        if (column.dataIndex === 'name' || column.dataIndex === 'surname') {
+                            column.setText(column.dataIndex === 'name' ? 'ชื่อ' : 'นามสกุล');
+                            column.show();
+                        }
+                    });
+                }
                 addUserFilters(grid);
                 if (grid.schoolBulkUsersReady) return;
                 var toolbar=grid.getDockedItems('toolbar[dock="top"]')[0];

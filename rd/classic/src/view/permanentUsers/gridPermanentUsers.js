@@ -174,7 +174,7 @@ Ext.define('Rd.view.permanentUsers.gridPermanentUsers' ,{
                 flex        : 1,
                 dataIndex   : 'name',
                 tdCls       : 'gridTree',
-                hidden      : true,
+                hidden      : false,
                 filter      : {type: 'string'},stateId: 'StateGridPermanentUsers7'
             },
             {
@@ -182,7 +182,7 @@ Ext.define('Rd.view.permanentUsers.gridPermanentUsers' ,{
                 flex        : 1,
                 dataIndex   : 'surname',
                 tdCls       : 'gridTree',
-                hidden      : true,
+                hidden      : false,
                 filter      : {type: 'string'},stateId: 'StateGridPermanentUsers8'
             },
             {
