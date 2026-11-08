@@ -445,6 +445,49 @@
         });
 
     }
+    function addActivityFilters(grid) {
+        if (grid.down('#activityFilters')) return;
+        var store = grid.getStore();
+        var accounting = grid.isXType('gridRadaccts');
+        function applyFilter(property, value) {
+            if (grid.destroyed || grid.destroying || grid.schoolClearingActivityFilters) return;
+            var id = 'visible-activity-' + property;
+            value = Ext.String.trim(value || '');
+            if (value) {
+                store.addFilter({id:id,property:property,operator:'like',value:value});
+            } else if (store.getFilters().get(id)) {
+                store.removeFilter(id);
+            }
+        }
+        var specs = [['username','Username'],['realm','Realm'],
+            [accounting ? 'nasidentifier' : 'nasname','NAS']];
+        if (accounting) {
+            specs.push(['framedipaddress','IP ผู้ใช้'],['callingstationid','MAC']);
+        } else {
+            specs.push(['reply','ผลยืนยันตัวตน']);
+        }
+        var items = specs.map(function (spec) {
+            return {
+                xtype:'textfield',fieldLabel:spec[1],width:180,
+                emptyText:'พิมพ์เพื่อค้นหา…',
+                listeners:{change:{buffer:350,fn:function(field) {
+                    if (!field.destroyed && !field.destroying) applyFilter(spec[0],field.getValue());
+                }}}
+            };
+        });
+        items.push({xtype:'button',text:'ล้างตัวกรอง',iconCls:'x-fa fa-times',handler:function() {
+            grid.schoolClearingActivityFilters = true;
+            grid.down('#activityFilters').query('field').forEach(function(field) {field.setValue('');});
+            grid.filters.clearFilters();
+            store.clearFilter();
+            grid.schoolClearingActivityFilters = false;
+        }});
+        grid.addDocked({
+            xtype:'toolbar',itemId:'activityFilters',dock:'top',weight:10,
+            enableOverflow:true,layout:{type:'hbox',align:'bottom'},
+            defaults:{labelAlign:'top',margin:'0 8 0 0'},items:items
+        });
+    }
     function populate() {
         document.querySelectorAll('.heading').forEach(function (heading) {
             if (heading.textContent.trim() === 'RADIUS optional' && heading.style.display !== 'none') {
@@ -567,6 +610,7 @@
                 if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
             });
             Ext.ComponentQuery.query('gridRadaccts, gridRadpostauths').forEach(function (grid) {
+                addActivityFilters(grid);
                 if (grid.schoolThaiTimeReady) return;
                 var toolbar = grid.getDockedItems('toolbar[dock="top"]')[0];
                 if (!toolbar) return;
