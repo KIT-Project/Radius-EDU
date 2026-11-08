@@ -404,6 +404,8 @@
             defaults: { labelAlign: 'top', margin: '0 8 0 0' },
             items: [
                 userFilterField('username', 'ค้นหา Username', 250),
+                userFilterField('name', 'ชื่อ', 190),
+                userFilterField('surname', 'นามสกุล', 190),
                 userFilterField('realm', 'Realm', 190),
                 userFilterField('profile', 'Profile', 190),
                 {
