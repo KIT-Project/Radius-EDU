@@ -566,7 +566,14 @@
                 var separator = component.nextSibling();
                 if (separator && separator.isXType('tbseparator') && !separator.hidden) separator.hide();
             });
-            // Keep timezone components and their configured values for request parameters.
+            Ext.ComponentQuery.query('gridRadaccts, gridRadpostauths').forEach(function (grid) {
+                if (grid.schoolThaiTimeReady) return;
+                var toolbar = grid.getDockedItems('toolbar[dock="top"]')[0];
+                if (!toolbar) return;
+                grid.schoolThaiTimeReady = true;
+                toolbar.add({xtype:'tbtext',text:'เวลาไทย (Asia/Bangkok, UTC+7)'});
+            });
+            // Activity Monitor requests Bangkok explicitly; keep original controls for compatibility.
             Ext.ComponentQuery.query('toolbar cmbTimezones#cmbTimezone').forEach(function (timezone) {
                 if (!timezone.hidden) timezone.hide();
                 [timezone.previousSibling(),timezone.nextSibling()].forEach(function (separator) {
@@ -661,6 +668,14 @@
 
     function install() {
         if (!window.Ext || !Ext.Ajax || !Ext.data || !Ext.data.Store) return false;
+        Ext.Ajax.on('beforerequest', function (connection, options) {
+            // Dashboard calculations deliberately continue receiving UTC timestamps.
+            if (options.schoolRaw || !/\/(radaccts|radpostauths)\/index(?:-with-span)?\.json(?:\?|$)/.test(options.url || '')) return;
+            var params = options.params;
+            if (typeof params === 'string') params = Ext.Object.fromQueryString(params);
+            options.params = Ext.apply({}, params || {});
+            options.params.display_timezone = 'Asia/Bangkok';
+        });
         var originalLoad = Ext.data.Store.prototype.load;
         Ext.data.Store.prototype.load = function () {
             var store = this;

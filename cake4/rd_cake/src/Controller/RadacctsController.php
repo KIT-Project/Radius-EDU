@@ -322,6 +322,9 @@ class RadacctsController extends AppController {
                 $tz = $ent->name;
             }
         }        
+        if ($this->request->getQuery('display_timezone') === 'Asia/Bangkok') {
+            $tz = 'Asia/Bangkok';
+        }
         $time 		= new FrozenTime("$day 00:00:00", $tz);
         
         //=== Span ====        
@@ -471,6 +474,10 @@ class RadacctsController extends AppController {
             }
         }
         
+        if ($this->request->getQuery('display_timezone') === 'Asia/Bangkok') {
+            $tz = 'Asia/Bangkok';
+        }
+
         //===== PAGING (MUST BE LAST) ======
         $limit  = 50;   //Defaults
         $page   = 1;

@@ -123,7 +123,9 @@ class RadpostauthsController extends AppController {
                     'realm'             => $i->realm,
                     'reply'             => $i->reply,
                     'nasname'           => $i->nasname,
-                    'authdate'          => $i->authdate
+                    'authdate'          => $this->request->getQuery('display_timezone') === 'Asia/Bangkok' && $i->authdate
+                        ? $i->authdate->setTimezone('Asia/Bangkok')->format('Y-m-d H:i:s')
+                        : $i->authdate
                 ]
             );
         }                
